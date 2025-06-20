@@ -32,13 +32,20 @@ local idleRezAlert = true	-- make false if you don't want to be alerted to idle 
 -- NOTE: NEEDS TESTING - Monitoring Health means this widget will be called whenever ANY unit is damaged, so it could cause performance issues
 -- TODO: How to make this widget only have the widget run if monitoring is enabled? MAYBE widget only brought in from other file? UnitDamaged(unitID, unitDefID, unitTeam, damage, paralyzer, weaponDefID, projectileID, attackerID, attackerDefID, attackerTeam)
 
-local trackAllMyUnitsRules = {} -- or use something like {hp, coords, destroyed} -- What else?
+
+-- Not implemented yet
+-- if 2 or more type of notifications has to send, then this many seconds will be there between those notifications
+local minSecsBetweenNotifications = 3 -- Second
+
+local trackAllMyUnitsRules = {} -- or use something like {hp, coords, ,damaged, destroyed} -- What else?
 local trackAllEnemyUnitsRules = {} -- 
 local trackAllAlliedUnitsRules = {} -- 
 
 -- Newly added event types will need to be added here
 local validEvents = {"idle","damaged","destroyed","created","finished","los","enteredAir","stockpile","thresholdHP"}
 local validEventRules = {"maxTimes", "reAlertSec", "mark", "ping", "alertSound", "threshPerc"}
+-- 
+
 
 -- TODO: create rules for below types in makeRelTeamDefsRules()  #####################
 
@@ -122,9 +129,6 @@ local relevantMyUnitDefsRules = {} -- unitDefID (key), typeArray {commander,buil
 local relevantAllyUnitDefsRules = {} -- ### unitDefs wanted in ally armyManagers  -- TODO
 local relevantEnemyUnitDefsRules = {} -- ### unitDefs wanted in enemy armyManagers  -- TODO
 local relevantSpectatorUnitDefs = {}
--- Not implemented yet
--- if 2 or more type of notifications has to send, then this many seconds will be there between those notifications
-local timeBetweenNotifications = 3 -- Second
 
 --[[ For Reference, Discord Tomruler, at https://github.com/Tomruler/beyondallbuttplug/blob/main/beyond_all_buttplug.lua
     -- if EVENT_ENABLED["ON_COM_DAMAGED"] then
@@ -903,6 +907,33 @@ local function hasEventAlerts(unitID, defID, teamID, event)
   local threshPerc = eventsRulesTbl["threshPerc"]
 
   -- Process the rules to see if something needs to be done
+  -- custom logic for events. Notifications come later
+  if event == "idle" then
+    -- the idle call-in from spring should have already setIdle
+    -- special rules 
+  elseif event == "created" then -- already created above
+    -- special rules 
+  elseif event == "finished" then -- already created above
+    -- special rules 
+  elseif event == "enteredAir" then
+    -- special rules 
+  elseif event == "los" then
+    -- special rules 
+  elseif event == "stockpile" then
+    -- special rules 
+  elseif event == "damaged" or "destroyed" then
+    -- special rules 
+    if event == "damaged" then
+      -- special rules 
+    end
+    if event == "destroyed" then
+      -- special rules 
+    end
+    if event == "thresholdHP" then
+      -- special rules 
+    end
+  else
+  end
 
   if mark ~= nil or ping ~= nil or alertSound ~= nil then
     if debug then debugger("hasEventAlerts 9. Found 1+ alerts for unitType-event. unitType=" .. tostring(unitType) .. ", eventMatch=" .. type(eventMatch) .. ", unitDefID=" .. tostring(defID) .. ", teamID=" .. tostring(teamID) .. ", event=" .. tostring(event)) end
@@ -910,6 +941,10 @@ local function hasEventAlerts(unitID, defID, teamID, event)
       
     end
   end
+
+  
+  -- if notify: mark ~= nil or ping ~= nil or alertSound ~= nil 
+    -- notify
   
 
 end
@@ -924,7 +959,7 @@ end
 
 -- TODO: REPLACED ALREADY???
 -- The isRelevantEvent function decides whether the Lua Callin Return type (damage, idle, completed, ...) is relevant for the unit type/teamID based on what the configuration.
-local function isRelevantEvent(defID, teamID, event) -- ??
+local function isRelevantEvent(number defID, teamID, event) -- ??
   if debug then debugger("isRelevantEvent 1 UnitDefID[" .. tostring(defID) .. "].translatedHumanName=" .. tostring(UnitDefs[defID].translatedHumanName) .. ", teamID=" .. tostring(teamID) .. ", myTeamID=" .. tostring(myTeamID) .. ", event=" .. tostring(event)) end
   if not teamsManager:validIDs(nil, nil, true, defID, true, teamID, nil, nil, nil, nil) then debugger("isRelevantEvent 2. INVALID input. Returning nil.") return nil end
   if not validEvent(event) then debugger("isRelevantEvent 3. ERROR. Bad input value event=" .. tostring(event)) return nil end
@@ -975,7 +1010,7 @@ local function isUnitIdle(unitID)
   -- Spring.Echo("isUnitIdle Spring.GetUnitDefID(" .. Spring.GetUnitDefID(unitID) .. "), translatedHumanName=" .. UnitDefs[Spring.GetUnitDefID(unitID)].translatedHumanName .. ", BuilderUnitDefIDs[Spring.GetUnitDefID(" .. unitID .. ")]=" .. BuilderUnitDefIDs[Spring.GetUnitDefID(unitID)])
 	local builderType = BuilderUnitDefIDs[Spring.GetUnitDefID(unitID)]
 	if builderType == 3 then -- Factory
-    local cmdLen = spGetFactoryCommands(unitID, 0)      -- TODO: Change to use Spring.GetFullBuildQueue(unitId) ? #########
+    local cmdLen = spGetFactoryCommands(unitID, 0)      -- TODO: Change to use Spring.GetFullBuildQueue(unitId) ? ######### or better GetFactoryCounts( number unitID [, number count [, bool addCMDs ]] )
     if debug then debugger("isUnitIdle FACTORY unitID[" .. unitID .. "], count=" .. cmdLen) end
     --Spring.Echo("isUnitIdle FACTORY unitID[" .. unitID .. "], count=" .. cmdLen)
 		return cmdLen == 0
@@ -1225,6 +1260,7 @@ end
 -- Spring.GetUnitPosition(unitID)
 -- Spring.GetUnitDefID
 -- Spring.GetTeamUnitsByDefs(myTeamID, FactoryDefIDs)
+-- Spring.GetTeamUnitsByDefs ( number teamID, number unitDefID | tableUnitDefs = { number unitDefID1, ... } ) -- return: nil | table unitTable = { [1] = number unitID, ... }
 -- Spring.GetTeamUnits(teamId)
 -- Spring.GetUnitTeam
 -- Spring.GetCommandQueue
@@ -1234,6 +1270,19 @@ end
 -- Spring.GetUnitCommands(unitId, -1)
 -- Spring.GetFullBuildQueue(unitId)
 -- Spring.ValidUnitID(unitId)
+-- Spring.GetTeamUnitStats ( number teamID, string "metal" | "energy" ) -- return: nil | number used, number produced, number excessed, number received, number sent
+-- Spring.GetTeamResources ( number teamID, string "metal" | "energy" ) -- return: nil | number currentLevel, number storage, number pull, number income, number expense, number share, number sent, number received
+-- Spring.GetTeamUnitsSorted ( number teamID ) -- return: nil | table unitDefTable = { [number unitDefID] = { [1] = number unitID, ... }, ... }
+-- Spring.GetUnitHealth ( number unitID ) -- return: nil | number health, number maxHealth, number paralyzeDamage, number captureProgress, number buildProgress -- Build progress is returned as floating point number between 0.0 and 1.0.
+-- Spring.GetUnitResources ( number unitID ) -- return: nil | number metalMake, number metalUse, number energyMake, number energyUse
+-- Spring.GetUnitMetalExtraction ( number unitID ) -- return: nil | number metalExtraction
+-- Spring.GetUnitStockpile ( number unitID ) -- return: nil | number numStockpiled, number numStockpileQued, number buildPercent
+-- Spring.GetUnitPosition ( number unitID [, bool midPos [, bool aimPos ]] ) -- return: nil | number basePointX, number basePointY, number basePointZ [, number midPointX, number midPointY, number midPointZ [, number aimPointX, number aimPointY, number aimPointZ ]] -- Since 89.0, returns the base (default), middle or aim position of the unit.
+-- Spring.GetUnitSensorRadius ( number unitID, string type ) -- return: nil | number radius -- Possible types are: los, airLos, radar, sonar, seismic, radarJammer, sonarJammer
+-- Spring.IsPosInRadar ( number x, number y, number z, number allyID ) -- return: bool isInRadar
+-- Spring.IsAboveMiniMap ( number x, number y ) -- return: nil | bool isAbove
+-- Spring.SendMessageToPlayer ( number playerID, string message ) -- return: nil
+
 
 -- function widget:UnitDamaged(unitID, unitDefID, unitTeam, damage, paralyzer, weaponDefID, projectileID, attackerID, attackerDefID, attackerTeam) end
 -- function widget:GameStart() end -- Called upon the start of the game. Not called when a saved game is loaded.
@@ -1241,13 +1290,14 @@ end
 -- function widget:UnitLeftLos(unitID, unitTeam, allyTeam, unitDefID) end -- Called when a unit leaves LOS of an allyteam. For widgets, this one is called just before the unit leaves los, so you can still get the position of a unit that left los.
 -- function widget:UnitLoaded(unitID, unitDefID, unitTeam, transportID, transportTeam) end -- Called when a unit is loaded by a transport.
 -- function widget:StockpileChanged(unitID, unitDefID, unitTeam, weaponNum, oldCount, newCount) end -- Called when a units stockpile of weapons increases or decreases. See stockpile.
+-- function widget:IsAbove(x, y) -- Called every Update. Must return true for Mouse* events and GetToolTip to be called.
+-- function widget:GameID(gameID) -- Called once to deliver the gameID. As of 101.0+ the string is encoded in hex.
+
+-- SYNCHED
+-- function widget:AllowUnitTransfer(unitID, unitDefID, oldTeam, newTeam, capture) -- return: bool allow -- Called just before a unit is transferred to a different team, the boolean return value determines whether or not the transfer is permitted.
 
 
--- Spring.SendMessageToPlayer ( number playerID, string message )
 -- Spring.PlaySoundFile ( string soundfile [, number volume = 1.0 [, number posx [, number posy [, number posz [, number speedx[, number speedy[, number speedz[, number | string channel ]]]]]]]] )
-
--- Spring.IsAboveMiniMap ( number x, number y ) -- return: nil | bool isAbove    ### Does what?
--- How to get if mouse over minimap?
 
 -- Summary:
 -- allyID = allyTeamID  -- Gaia always highest alliance and compID
