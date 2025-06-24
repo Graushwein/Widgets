@@ -49,7 +49,10 @@ local validEventRules = {"maxTimes", "reAlertSec", "mark", "ping", "alertSound",
 
 -- TODO: create rules for below types in makeRelTeamDefsRules()  #####################
 
-	-- mark = only you see. ping = ALL ALLIES see it. Be careful with ping
+-- multiple event rules allowed, but must be unique. Example: myCommanderRules can'the have 2 "idle", but can have all events: idle, damaged, and finished...
+-- {type = {event = {rules}}}
+-- units can have multiple types. makeRelTeamDefsRules() is used to do that.
+-- mark = only you see. ping = ALL ALLIES see it. Be careful with ping
 local myCommanderRules = {idle = {maxTimes=0, reAlertSec=15, mark=nil, alertSound="sounds/commands/cmd-selfd.wav"}, damaged = {maxTimes=0, reAlertSec=30, mark=nil, alertSound="sounds/commands/cmd-selfd.wav"}, thresholdHP = {maxTimes=0, reAlertSec=60, mark=nil, alertSound="sounds/commands/cmd-selfd.wav", threshMinPerc=.5, priority=0} } -- will sound alert when Commander idle/15 secs, (re)damaged once per 30 seconds (unlimited), and when damage causes HP to be under 50%
 local myConstructorRules = {idle = {maxTimes=0, reAlertSec=15, mark=nil, alertSound="sounds/commands/cmd-selfd.wav"}, destroyed = {maxTimes=0, reAlertSec=1, mark="Con Lost", alertSound=nil}}
 local myFactoryRules = {idle = {maxTimes=0, reAlertSec=15, mark=nil, alertSound="sounds/commands/cmd-selfd.wav"}}
@@ -259,7 +262,7 @@ local pArmyManager = protoObject:clone()
 pArmyManager.units = {} -- units key/value. Added with armyManager[unitID] = [unitObject]. Objects in multiple arrays/tables are the same object (memory efficient)
 pArmyManager.unitsLost = {} -- key/value unitsLost[unitID] = [unitObject] of unit objects destroyed, taken, or given
 pArmyManager.unitsReceived = {} -- key/value unitsReceived[unitID] = [unitObject] of unit objects given by an ally. Possibly used for notifications, but should remove after notified
-pArmyManager.relTypesRules = {} -- relevantMyUnitDefsRules is {defID = {type = {event = {rules}}}}
+pArmyManager.defTypesEventsRules = {} -- relevantMyUnitDefsRules is {defID = {type = {event = {rules}}}}
 -- pArmyManager.[type] -- REMINDER. All units a type automatically add themselves to the type-named table in their parent army unitID = unitObject for easy referencing
 
 pArmyManager.playerIDsNames = {} -- key/value of playerIDsNames[playerID] = [playerName], usually only one, that can control the army's units. TODO: Could hold Player objects
@@ -289,6 +292,7 @@ pUnit.isIdle = false -- Use the get/set-methods instead.
 pUnit.lastSetIdle = nil -- uses GetGameFrame()
 pUnit.created = nil -- gameSecs
 pUnit.lost = nil -- gameSecs
+pUnit.isLost = false
 pUnit.lastUpdate = nil -- Game seconds last update time of the unit (NOT used YET)
 pUnit.health = nil -- health of the unit (NOT IMPLEMENTED YET)
 pUnit.debug = false  -- ############################Prototype Unit debug mode enable################################################
@@ -396,11 +400,11 @@ function teamsManager:newArmyManager(teamID, allianceID, playerID, playerName) -
   if teamID == myTeamID then
     armyManager.isMyTeam = true
     self.myArmyManager = armyManager
-    armyManager.relTypesRules = relevantMyUnitDefsRules
+    armyManager.defTypesEventsRules = relevantMyUnitDefsRules
   elseif Spring.AreTeamsAllied(teamID, myTeamID) then
-    armyManager.relTypesRules = relevantAllyUnitDefsRules
+    armyManager.defTypesEventsRules = relevantAllyUnitDefsRules
   else
-    armyManager.relTypesRules = relevantEnemyUnitDefsRules
+    armyManager.defTypesEventsRules = relevantEnemyUnitDefsRules
   end
   if type(playerID) == "nil" then
     if teamID == Spring.GetGaiaTeamID() then
@@ -538,13 +542,21 @@ function teamsManager:moveUnit(unitID, defID, oldTeamID, newTeamID)
       return nil
     end
   end
-  aUnit:setLost()
+  aUnit:setLost(false)
   aUnit.parent = newTeamArmy
   newTeamArmy.units[unitID] = aUnit -- set here because it is only set in createUnit(), and setLost() removed from other army
   aUnit:setTypes(aUnit.defID)
   newTeamArmy.unitsReceived[aUnit.ID] = aUnit
   self.lastUpdate = Spring.GetGameSeconds()
   return aUnit
+end
+
+function teamsManager:getOrCreateUnit(unitID, defID, teamID)
+  if debug or self.debug then debugger("teamsManager:getOrCreateUnit 1. unitID=" .. tostring(unitID) .. ", unitDefID=" .. tostring(defID) .. ", teamID=".. tostring(teamID)) end
+  if not teamsManager:validIDs(true, unitID, true, defID, true, teamID, nil, nil, nil, nil) then debugger("teamsManager:getOrCreateUnit 2. INVALID input. Returning nil.") return nil end
+  local anArmy = self:getArmyManager(teamID)
+  if anArmy == nil then debugger("teamsManager:getOrCreateUnit 3. ERROR. Army NOT found. teamID=" .. tostring(teamID)) return nil end
+  return anArmy:getOrCreateUnit(unitID, defID)
 end
 
 function teamsManager:validIDs(vUnit, unitID, vdef, defID, vtm, teamID, vAlli, allianceID, vplr, playerID) -- only "v" vars=true will be validated
@@ -636,7 +648,7 @@ function pArmyManager:createUnit(unitID, defID)
     else
       debugger("createUnit 7. ERROR. Unit found in multiple(" .. tostring(#enemyUnits) .. ") armies. This shouldn't be possible? Could keep the most recently updated one, but is it really worth coding? Screw it, let's just nuke them from orbit to be sure! Making a new after. unitID=" .. tostring(aUnit.ID) .. ", unitDefID=" .. tostring(aUnit.defID) .. ", teamID=".. tostring(aUnit.parent.teamID) .. ", unitTeamNow=".. tostring(unitTeamNow))
       for k, eUnit in pairs(enemyUnits) do
-        eUnit:setLost()
+        eUnit:setLost(false)
       end
     end
   else
@@ -674,6 +686,44 @@ function pArmyManager:getUnit(unitID)  -- Get unit by unitID. Returns the unit o
   end
   if debug or self.debug then debugger("getUnit 4. FOUND unitID=" .. tostring(unitID) .. ", aUnit.ID=" .. tostring(aUnit.ID) .. ", aUnit.defID=" .. tostring(aUnit.defID) .. ", aUnit.teamID=" .. tostring(aUnit.parent.teamID)) end
   return aUnit
+end
+
+function pArmyManager:getOrCreateUnit(unitID, defID)
+  if debug or self.debug then debugger("pArmyManager:getOrCreateUnit 1. unitID=" .. tostring(unitID) .. ", unitDefID=" .. tostring(defID) .. ", teamID=".. tostring(self.teamID)) end
+  if not teamsManager:validIDs(true, unitID, true, defID, nil, nil, nil, nil, nil, nil) then debugger("pArmyManager:getOrCreateUnit 2. INVALID input. Returning nil.") return nil end
+  return self:getUnit(unitID) or self:createUnit(unitID, defID)
+end
+
+function pArmyManager:getTypesRulesForEvent(defID, event) -- defID, string event. Returns 0 to many types with ONLY their MATCHING EVENTS: {type1 = {event = {rules}}, type2 = {event = {rules}}}
+  if debug or self.debug then debugger("pArmyManager:getTypesRulesForEvent 1. type defID=" .. tostring(defID) .. ", event=" .. tostring(event)) end
+  if type(defID) ~= "number" or type(event) ~= "string" then
+    debugger("pArmyManager:getTypesRulesForEvent 2. ERROR. defID NOT number or event not string. defID=" .. tostring(defID) .. ", event=" .. tostring(event))
+  end
+  local typesEventRules = self.defTypesEventsRules[defID] -- {defID = {type = {event = {rules}}}}
+  if typesEventRules == nil or (type(typesEventRules) == "table" and next(typesEventRules) == nil) then
+    if debug or self.debug then debugger("pArmyManager:getTypesRulesForEvent 3. Returning nil, defID not in defTypesEventsRules or empty event table. defID=" .. tostring(defID)) end
+    return nil
+  elseif type(typesEventRules) ~= "table" then
+    debugger("pArmyManager:getTypesRulesForEvent 4. ERROR. typesEventRules NOT table. Returning nil. defID=" .. type(typesEventRules))
+    return nil
+  end
+  local typesWithEventRules = {}
+  local matches = 0
+  for aType, eventsTbl in pairs(typesEventRules) do -- {type = {event = {rules}}}
+    if debug then debugger("pArmyManager:getTypesRulesForEvent 5. aType=" .. tostring(aType) .. ", typesEventRules=" .. type(eventsTbl) .. ", event=" .. tostring(event)) end
+    local eventMatch = eventsTbl[event]
+    if type(eventMatch) == "table" and next(eventMatch) ~= nil then
+      if debug then debugger("pArmyManager:getTypesRulesForEvent 6. Adding match to array. aType=" .. tostring(aType) .. ", event=" .. tostring(event)) end
+      typesWithEventRules[aType] = {[event] = eventMatch}
+      matches = matches + 1
+    end
+  end
+  if matches == 0 then
+    if debug then debugger("pArmyManager:getTypesRulesForEvent 7. No matches, returning nil. event=" .. tostring(event) .. ", typesEventRules=" .. tableToString(typesWithEventRules)) end
+    return nil
+  end
+  if debug then debugger("pArmyManager:getTypesRulesForEvent 8. Returning matches=" .. tostring(matches) .. ", event=" .. tostring(event) .. ", typesEventRules=" .. tableToString(typesWithEventRules)) end
+  return typesWithEventRules
 end
 -- ################################################## Custom/Expanded ArmyManager methods start here #################################################
 
@@ -751,16 +801,28 @@ function pUnit:getIdle()
     self:setIdle()  -- lastSetIdle is only set when becoming idle from being not idle. Which means it will return false below to allow the extra second to prevent false positives
     if debug or self.debug then debugger("getIdle 3. Was actually Idle, corrected. cmdQueue=" .. tostring(count) .. ", GameFrame-LastIdle=" .. tostring(Spring.GetGameFrame() - self.lastSetIdle) .. ", isIdle=" .. tostring(self.isIdle) .. ",ID=" .. tostring(self.ID) .. ", defID=".. tostring(self.defID) .. ", teamID=".. tostring(self.parent.teamID)) end
   end
-  if self.isIdle and Spring.GetGameFrame() > self.lastSetIdle + 4 then -- because it may be idle very briefly before starting on the next queued task
+  if self.isIdle and Spring.GetGameFrame() < self.lastSetIdle + 5 then -- because it may be idle very briefly before starting on the next queued task
     if debug or self.debug then debugger("getIdle 4. Hasn't been idle for a second. Returning false. cmdQueue=" .. tostring(count) .. ", GameFrame-LastIdle=" .. tostring(Spring.GetGameFrame() - self.lastSetIdle) .. ", isIdle=" .. tostring(self.isIdle) .. ",ID=" .. tostring(self.ID) .. ", defID=".. tostring(self.defID) .. ", teamID=".. tostring(self.parent.teamID)) end  
-    return false
+    return nil -- So that you can know if waiting for time to pass
   end
   return self.isidle
 end
 
 -- TODO: Update to use relevant table
-function pUnit:setLost()
-  if debug or self.debug then debugger("setLost 1. ID=" .. tostring(self.ID) .. ", defID=".. tostring(self.defID) .. ", teamID=".. tostring(self.parent.teamID)) end
+function pUnit:setLost(destroyed)
+  if debug or self.debug then debugger("setLost 1. ID=" .. tostring(self.ID) .. ", defID=".. tostring(self.defID) .. ", teamID=".. tostring(self.parent.teamID) .. ", destroyed=" .. tostring(destroyed)) end
+  if type(destroyed) ~= "nil" and type(destroyed) ~= "boolean" then
+    debugger("setLost 2. ERROR. destroyed NOT nil or bool. ID=" .. tostring(self.ID) .. ", defID=".. tostring(self.defID) .. ", teamID=".. tostring(self.parent.teamID) .. ", destroyed=" .. tostring(destroyed))
+  end
+  if type(destroyed) == "nil" or destroyed == true then
+    destroyed = true
+  else
+    destroyed = false
+  end
+  if destroyed then
+    self.isLost = true
+    if debug or self.debug then debugger("setLost 3. Marked isLost = true.") end
+  end
   self.parent.unitsLost[self.ID] = self
   self.parent.units[self.ID] = nil
   -- ######################## update to have it loop through all unit type lists ############################
@@ -781,7 +843,7 @@ function pUnit:setLost()
   end
 
   -- TODO: Remove above when ready
-  local unitTypes = self:getTypesRules() -- {defID = {type = {event = {rules}}}}
+  local unitTypes = self:getTypesRules() -- {type = {event = {rules}}}}
   if unitTypes ~= nil then
     for aType, event in pairs(unitTypes) do
       if self.parent[aType][self.ID] ~= nil then
@@ -798,21 +860,21 @@ end
 function pUnit:getTypesRules(types) -- Nil for all, string for one, or array of strings input. Should not store in unit, since it can move between teams. The armyManagers define which units are important to track.
   if debug or self.debug then debugger("getTypesRules 1. ID=" .. tostring(self.ID) .. ", defID=".. tostring(self.defID) .. ", teamID=".. tostring(self.parent.teamID) .. ", types=" .. tostring(types) .. ", translatedHumanName=" .. UnitDefs[self.defID].translatedHumanName) end
   if self:hasTypeRules() == false then
-    if debug or self.debug then debugger("getTypesRules 2. Unit has no typeRules in relTypesRules. returning nil. ID=" .. tostring(self.ID) .. ", defID=".. tostring(self.defID) .. ", teamID=".. tostring(self.parent.teamID) .. ", types=" .. tostring(types)) end
+    if debug or self.debug then debugger("getTypesRules 2. Unit has no typeRules in defTypesEventsRules. returning nil. ID=" .. tostring(self.ID) .. ", defID=".. tostring(self.defID) .. ", teamID=".. tostring(self.parent.teamID) .. ", types=" .. tostring(types)) end
     return nil
   end
   if types == nil then
     if debug or self.debug then debugger("getTypesRules 3. Nil means returning all typesRules. ID=" .. tostring(self.ID) .. ", defID=".. tostring(self.defID) .. ", teamID=".. tostring(self.parent.teamID) .. ", types=" .. tostring(types)) end
-    return self.parent.relTypesRules[self.defID] -- {defID = {type = {event = {rules}}}}
+    return self.parent.defTypesEventsRules[self.defID] -- {defID = {type = {event = {rules}}}}
   elseif type(types) == "string" then
     if debug or self.debug then debugger("getTypesRules 4. Returning matching typeRules, if there. ID=" .. tostring(self.ID) .. ", defID=".. tostring(self.defID) .. ", teamID=".. tostring(self.parent.teamID) .. ", types=" .. tostring(types)) end
-    return {[types] = self.parent.relTypesRules[self.defID][types]}
+    return {[types] = self.parent.defTypesEventsRules[self.defID][types]}
   elseif type(types) == "table" then
     local typeTble = {}
     for i, aType in ipairs(types) do
-      if type(self.parent.relTypesRules[self.defID][aType]) == "table" then
+      if type(self.parent.defTypesEventsRules[self.defID][aType]) == "table" then
         if debug or self.debug then debugger("getTypesRules 5. Match found in loop, adding it. ID=" .. tostring(self.ID) .. ", defID=".. tostring(self.defID) .. ", teamID=".. tostring(self.parent.teamID) .. ", types=" .. tostring(types)) end
-        typeTble[aType] = self.parent.relTypesRules[self.defID][aType]
+        typeTble[aType] = self.parent.defTypesEventsRules[self.defID][aType]
       end
     end
     if debug or self.debug then debugger("getTypesRules 6. returning all matching typesRules. ID=" .. tostring(self.ID) .. ", defID=".. tostring(self.defID) .. ", teamID=".. tostring(self.parent.teamID) .. ", types=" .. tostring(types)) end
@@ -823,12 +885,15 @@ function pUnit:getTypesRules(types) -- Nil for all, string for one, or array of 
   end
 end
 
+function pUnit:getTypesRulesForEvent(event) -- defID, string event. Returns 0 to many types with ONLY their MATCHING EVENTS: {type1 = {event = {rules}}, type2 = {event = {rules}}}
+  if debug or self.debug then debugger("pUnit:getTypesRulesForEvent 1. Returning self.parent:getTypesRulesForEvent(" .. tostring(self.defID) .. "," .. tostring(event) .. "), " .. tostring(self.ID) .. ", teamID=".. tostring(self.parent.teamID)) end
+  return self.parent:getTypesRulesForEvent(self.defID, event)
+end
+
 -- ################################################## Custom/Expanded Unit methods starts here #################################################
 
--- TODO: 
--- OLD, phase out #################
+-- TODO: Remove top to leave new at bottom
 -- Where should this go? How to make it easily USER CONFIG expandable? ############################################
--- is this even needed with the new system? No
 function pUnit:setTypes()
   if debug or self.debug then debugger("setTypes 1. ID=" .. tostring(self.ID) .. ", defID=".. tostring(self.defID) .. ", teamID=".. tostring(self.parent.teamID)) end
   -- ######################## update to have it loop through all unit type lists ############################
@@ -857,8 +922,7 @@ function pUnit:setTypes()
   end
 
   -- NEW. Get rid of old above
-
-  local unitTypes = self:getTypesRules() -- {defID = {type = {event = {rules}}}}
+  local unitTypes = self:getTypesRules() -- {type = {event = {rules}}}}
   if debug or self.debug then debugger("setTypes X. translatedHumanName=" .. tostring(UnitDefs[self.defID].translatedHumanName) .. ", type(unitTypes)=".. type(unitTypes)) end
   if unitTypes ~= nil then
     for aType, event1 in pairs(unitTypes) do
@@ -876,14 +940,14 @@ end
 
 function pUnit:hasTypeRules()
   if debug or self.debug then debugger("hasTypeRules 1. ID=" .. tostring(self.ID) .. ", defID=".. tostring(self.defID) .. ", teamID=".. tostring(self.parent.teamID)) end
-  local typeRules = self.parent.relTypesRules[self.defID]
+  local typeRules = self.parent.defTypesEventsRules[self.defID]
   if typeRules == nil then
-    if debug or self.debug then debugger("hasTypeRules 2. Unit has no typeRules in relTypesRules. returning nil. ID=" .. tostring(self.ID) .. ", defID=".. tostring(self.defID) .. ", teamID=".. tostring(self.parent.teamID) .. ", types=" .. tostring(types)) end
+    if debug or self.debug then debugger("hasTypeRules 2. Unit has no typeRules in defTypesEventsRules. returning nil. ID=" .. tostring(self.ID) .. ", defID=".. tostring(self.defID) .. ", teamID=".. tostring(self.parent.teamID) .. ", types=" .. tostring(types)) end
     return false
   end
   local type1, event1 = next(typeRules)
   if type(event1) ~= "table" then
-    if debug or self.debug then debugger("hasTypeRules 3. Unit has a type, but no Rules in relTypesRules. returning nil. ID=" .. tostring(self.ID) .. ", defID=".. tostring(self.defID) .. ", teamID=".. tostring(self.parent.teamID) .. ", types=" .. tostring(types)) end
+    if debug or self.debug then debugger("hasTypeRules 3. Unit has a type, but no Rules in defTypesEventsRules. returning nil. ID=" .. tostring(self.ID) .. ", defID=".. tostring(self.defID) .. ", teamID=".. tostring(self.parent.teamID) .. ", types=" .. tostring(types)) end
     return false
   end
   return true
@@ -917,7 +981,8 @@ local function addToRelTeamDefsRules(defID, key)
     relevantEnemyUnitDefsRules[defID][key] = trackEnemyTypesRules[key]
   end
 end
-local function makeRelTeamDefsRules() -- This should ensure that types are only added to armyManager.relTypesRules if there are events defined
+
+local function makeRelTeamDefsRules() -- This should ensure that types are only added to armyManager.defTypesEventsRules if there are events defined
   for unitDefID, unitDef in pairs(UnitDefs) do
     if unitDef.customParams.iscommander and (next(trackMyTypesRules["commander"]) ~= nil or next(trackAllyTypesRules["commander"]) ~= nil or next(trackEnemyTypesRules["commander"]) ~= nil) then
       if debug then debugger("Assigning Commander BuilderUnitDefIDs, unitDefID[" .. unitDefID .. "].translatedHumanName=" .. UnitDefs[unitDefID].translatedHumanName) end
@@ -942,7 +1007,7 @@ local function makeRelTeamDefsRules() -- This should ensure that types are only 
   end
 end
 
--- OLD #### Build list of unit defIDs that should be tracked
+-- OLD #### replaced by above
 for unitDefID, unitDef in pairs(UnitDefs) do
 	if unitDef.buildSpeed > 0 and not string.find(unitDef.name, 'spy') and (unitDef.canAssist or unitDef.buildOptions[1] or (idleRezAlert and unitDef.canResurrect)) and not unitDef.customParams.isairbase then
 		if unitDef.customParams.iscommander then
@@ -963,6 +1028,7 @@ for unitDefID, unitDef in pairs(UnitDefs) do
 	end
 end
 
+-- TODO: Is this really needed? This is more for debugging in case someone spells the type wrong OR doesn't add it to the validEvents list.
 local function validEvent(event) -- Tells whether event is in table of valid events
   if debug then debugger("validEvent 1. event=" .. tostring(event)) end
   for _, value in ipairs(validEvents) do
@@ -973,8 +1039,11 @@ local function validEvent(event) -- Tells whether event is in table of valid eve
   return false
 end
 
+-- TODO: Is this really needed? This is more for debugging in case someone messes up event definitions.
+-- Maybe have it just test all rules at once?
 local function validEventRule(rule)
   if debug then debugger("validEvent 1. event=" .. tostring(rule)) end
+  -- ### Stub. Would need revamp to validate that each rule has expected values
   for _, value in ipairs(validEventRules) do
     if value == rule then
       return true
@@ -994,10 +1063,13 @@ function widget:PlayerChanged(playerID)
 	end
 end
 
+-- TODO: Remove as it is relaced by new defTypesEventsRules logic
 local function isBuilder(unitDefID)
     return BuilderUnitDefIDs[unitDefID] ~= nil
 end
 
+-- TEST if used. UNFINISHED
+-- Maybe rename to getTypeEvents? and make it a unit method?
 local function hasEventAlerts(unitID, defID, teamID, event)
   if debug then debugger("hasEventAlerts 1. unitID=" .. tostring(unitID) .. ", unitDefID=" .. tostring(defID) .. ", teamID=" .. tostring(teamID)) end
   if not teamsManager:validIDs(true, unitID, true, defID, true, teamID, nil, nil, nil, nil) then debugger("hasEventAlerts 2. INVALID input. Returning nil.") return nil end
@@ -1007,20 +1079,23 @@ local function hasEventAlerts(unitID, defID, teamID, event)
     debugger("hasEventAlerts 4. ERROR. Army NOT FOUND. unitID=" .. tostring(unitID) .. ", unitDefID=" .. tostring(defID) .. ", teamID=" .. tostring(teamID) .. ", event=" .. tostring(event))
     return nil
   end
-  local typeRulesTbl = army.relTypesRules[defID]
+  local typeRulesTbl = army.defTypesEventsRules[defID] -- {defID = {type = {event = {rules}}}}
   if type(typeRulesTbl) ~= "table" then
-    if debug then debugger("hasEventAlerts 5. DefID not in relTypesRules. typeRulesTbl not table. typeRulesTbl=" .. type(typeRulesTbl) .. ", unitID=" .. tostring(unitID) .. ", unitDefID=" .. tostring(defID) .. ", teamID=" .. tostring(teamID) .. ", event=" .. tostring(event)) end
+    if debug then debugger("hasEventAlerts 5. DefID not in defTypesEventsRules or not table. typeRulesTbl=" .. type(typeRulesTbl) .. ", unitID=" .. tostring(unitID) .. ", unitDefID=" .. tostring(defID) .. ", teamID=" .. tostring(teamID) .. ", event=" .. tostring(event)) end
     return nil
   end
   local unitType, eventsRulesTbl = next(typeRulesTbl, nil)
   -- TODO: I could validate user configured tables' structure all at once, instead of every time... HOWEVER, they COULD be accidentally messed up afterwards and be a pain to find?
-  if type(unitType) ~= "string" or type(eventsRulesTbl) ~= "table" or eventsRulesTbl[event] == nil then
+  if type(unitType) ~= "string" or type(eventsRulesTbl) ~= "table" then
     debugger("hasEventAlerts 6. ERROR. Bad Type string=" .. type(unitType) .. " or Bad eventsRulesTbl=" .. type(eventsRulesTbl) .. ", unitID=" .. tostring(unitID) .. ", unitDefID=" .. tostring(defID) .. ", teamID=" .. tostring(teamID) .. ", event=" .. tostring(event))
     return nil
   end
-  local eventMatch = eventsRulesTbl[event]
-  if eventMatch == nil or type(eventMatch) ~= "table" then
-    if debug then debugger("hasEventAlerts 7. eventMatch not found. unitType=" .. tostring(unitType) .. ", eventMatch=" .. type(eventMatch) .. ", unitID=" .. tostring(unitID) .. ", unitDefID=" .. tostring(defID) .. ", teamID=" .. tostring(teamID) .. ", event=" .. tostring(event)) end
+  if eventsRulesTbl[event] == nil then
+    if debug then debugger("hasEventAlerts 7. Event not found for unit. unitID=" .. tostring(unitID) .. ", unitDefID=" .. tostring(defID) .. ", teamID=" .. tostring(teamID) .. ", event=" .. tostring(event)) end
+  end
+  local eventRules = eventsRulesTbl[event]
+  if eventRules == nil or type(eventRules) ~= "table" then
+    if debug then debugger("hasEventAlerts 7. eventRules not found. unitType=" .. tostring(unitType) .. ", eventRulesType=" .. type(eventRules) .. ", unitID=" .. tostring(unitID) .. ", unitDefID=" .. tostring(defID) .. ", teamID=" .. tostring(teamID) .. ", event=" .. tostring(event)) end
     return nil
   end
   -- we finally know the type should have some rules! Might as well make sure it is tracked in an armyManager.
@@ -1045,9 +1120,9 @@ local function hasEventAlerts(unitID, defID, teamID, event)
 
 
   if mark ~= nil or ping ~= nil or alertSound ~= nil then
-    if debug then debugger("hasEventAlerts 9. Found 1+ alerts for unitType-event. unitType=" .. tostring(unitType) .. ", eventMatch=" .. type(eventMatch) .. ", unitDefID=" .. tostring(defID) .. ", teamID=" .. tostring(teamID) .. ", event=" .. tostring(event)) end
+    if debug then debugger("hasEventAlerts 9. Found 1+ alerts for unitType-event. unitType=" .. tostring(unitType) .. ", eventMatch=" .. type(eventRules) .. ", unitDefID=" .. tostring(defID) .. ", teamID=" .. tostring(teamID) .. ", event=" .. tostring(event)) end
     if type(maxTimes) ~= "number" or type(reAlertSec) ~= "number" then -- make a function validate this stuff?
-      debugger("hasEventAlerts 10. ERROR. Invalid maxTimes(" .. tostring(maxTimes) .. ") or reAlertSec(" .. tostring(reAlertSec) .. "). Returning nil. unitType=" .. tostring(unitType) .. ", eventMatch=" .. tostring(eventMatch) .. ", unitDefID=" .. tostring(defID) .. ", teamID=" .. tostring(teamID) .. ", event=" .. tostring(event))
+      debugger("hasEventAlerts 10. ERROR. Invalid maxTimes(" .. tostring(maxTimes) .. ") or reAlertSec(" .. tostring(reAlertSec) .. "). Returning nil. unitType=" .. tostring(unitType) .. ", eventMatch=" .. tostring(eventRules) .. ", unitDefID=" .. tostring(defID) .. ", teamID=" .. tostring(teamID) .. ", event=" .. tostring(event))
       return nil
     end
 
@@ -1112,7 +1187,8 @@ end
 
 -- TODO: REPLACED ALREADY???
 -- The isRelevantEvent function decides whether the Lua Callin Return type (damage, idle, completed, ...) is relevant for the unit type/teamID based on what the configuration.
-local function isRelevantEvent(defID, teamID, event) -- ??
+-- Replaced with getEventRules, an ARMY method
+local function isRelevantEvent(unitID, defID, teamID, event) -- ??
 -- debug = true
 if debug then debugger("isRelevantEvent 1 UnitDefID[" .. tostring(defID) .. "].translatedHumanName=" .. tostring(UnitDefs[defID].translatedHumanName) .. ", teamID=" .. tostring(teamID) .. ", myTeamID=" .. tostring(myTeamID) .. ", event=" .. tostring(event)) end
   if not teamsManager:validIDs(nil, nil, true, defID, true, teamID, nil, nil, nil, nil) then debugger("isRelevantEvent 2. INVALID input. Returning nil.") return nil end
@@ -1124,16 +1200,17 @@ if debug then debugger("isRelevantEvent 1 UnitDefID[" .. tostring(defID) .. "].t
     relTeamUnitDefRules = relevantMyUnitDefsRules
   elseif teamsManager:isAllied(teamID) then
     relTeamUnitDefRules = relevantAllyUnitDefsRules
-  else
+  else -- Add Spectator?
     relTeamUnitDefRules = relevantEnemyUnitDefsRules
   end
-  if relTeamUnitDefRules[defID] == nil then
+  local typesEventRules = relTeamUnitDefRules[defID]
+  if type(typesEventRules) ~= "table" then
     return false
   end
-  for k, v in pairs(relTeamUnitDefRules[defID]) do -- {defID = {type = {event = {rules}}}}
-    if debug then debugger("isRelevantEvent 4. k=" .. tostring(k) .. ", v=" .. tostring(v) .. ", event=" .. event) end
-    if type(v[event]) == "table" then
-      if debug then debugger("isRelevantEvent 5 Returning True. k=" .. tostring(k) .. ", v=" .. tableToString(v[event]) .. ", event=" .. event) end
+  for aType, eventsTbl in pairs(typesEventRules) do -- {defID = {type = {event = {rules}}}}
+    if debug then debugger("isRelevantEvent 4. k=" .. tostring(aType) .. ", v=" .. tostring(eventsTbl) .. ", event=" .. event) end
+    if type(eventsTbl[event]) == "table" then
+      if debug then debugger("isRelevantEvent 5 Returning True. k=" .. tostring(aType) .. ", v=" .. tableToString(eventsTbl[event]) .. ", event=" .. event) end
       return true
     end
   end
@@ -1142,7 +1219,7 @@ if debug then debugger("isRelevantEvent 1 UnitDefID[" .. tostring(defID) .. "].t
 end
 
 
--- Updated DISABLED ############# THIS SHOULD BE AN ARMYMANAGER METHOD
+-- Updated but new stuff is DISABLED ############# THIS SHOULD BE AN ARMYMANAGER METHOD
 local function isUnitRelevant(defID, teamID)
   if debug then debugger("isUnitRelevant 1. UnitDefs[" .. tostring(defID) .. "].translatedHumanName=" .. tostring(UnitDefs[defID].translatedHumanName) .. ", unitTeam=" .. tostring(teamID) .. ", myTeamID=" .. tostring(myTeamID) .. ", isBuilder(unitDefID)=" .. tostring(isBuilder(defID))) end
   --Spring.Echo("isUnitRelevant UnitDefs[" .. unitDefID .. "].translatedHumanName=" .. UnitDefs[unitDefID].translatedHumanName .. ", unitTeam=" .. unitTeam .. ", myTeamID=" .. myTeamID .. ", isBuilder(unitDefID)=" .. tostring(isBuilder(unitDefID)))
@@ -1151,8 +1228,8 @@ local function isUnitRelevant(defID, teamID)
     debugger("isUnitRelevant 2. DISABLED ERROR. Army NOT FOUND. Returning nil. UnitDefs[" .. tostring(defID) .. "].translatedHumanName=" .. tostring(UnitDefs[defID].translatedHumanName) .. ", unitTeam=" .. tostring(teamID) .. ", myTeamID=" .. tostring(myTeamID) .. ", isBuilder(unitDefID)=" .. tostring(isBuilder(defID)))
     -- return nil
   else
-    if debug then debugger("isUnitRelevant 3. DISABLED Returning=" .. tostring(army.relTypesRules[defID]) .. ", UnitDefs[" .. tostring(defID) .. "].translatedHumanName=" .. tostring(UnitDefs[defID].translatedHumanName) .. ", unitTeam=" .. tostring(teamID) .. ", myTeamID=" .. tostring(myTeamID) .. ", isBuilder(unitDefID)=" .. tostring(isBuilder(defID))) end
-    -- return army.relTypesRules[defID] ~= nil
+    if debug then debugger("isUnitRelevant 3. DISABLED Returning=" .. tostring(army.defTypesEventsRules[defID]) .. ", UnitDefs[" .. tostring(defID) .. "].translatedHumanName=" .. tostring(UnitDefs[defID].translatedHumanName) .. ", unitTeam=" .. tostring(teamID) .. ", myTeamID=" .. tostring(myTeamID) .. ", isBuilder(unitDefID)=" .. tostring(isBuilder(defID))) end
+    -- return army.defTypesEventsRules[defID] ~= nil
   end
   return teamID == myTeamID and isBuilder(defID) -- TODO: Remove
 end
@@ -1217,8 +1294,9 @@ function widget:UnitIdle(unitID, defID, teamID)
   if debug then debugger("UnitIdle 1. UnitDefs[" .. tostring(defID) .. "].translatedHumanName=" .. tostring(UnitDefs[defID].translatedHumanName) .. ", unitID=" .. tostring(unitID) .. ", unitTeam=" .. tostring(teamID)) end
 	-- Spring.Echo("UnitIdle. Check Botlab spGetFactoryCommands(26761,0)=" .. spGetFactoryCommands(26761, 0) .. ", translatedHumanName=" .. UnitDefs[362].translatedHumanName)
 	-- This will be called by ArmyManager to check if the unit is relevant for the armyManager
-  local relEvent = isRelevantEvent(defID, teamID, "idle")
+  local relEvent = isRelevantEvent(unitID, defID, teamID, "idle")
   if debug then debugger("UnitIdle 22. isRelevantEvent=" .. tostring(relEvent) .. ", UnitDefs[" .. tostring(defID) .. "].translatedHumanName=" .. tostring(UnitDefs[defID].translatedHumanName) .. ", unitID=" .. tostring(unitID) .. ", unitTeam=" .. tostring(teamID)) end
+  local anArmy = teamsManager:getArmyManager(teamID)
 
   if isUnitRelevant(defID, teamID) then
     if debug then debugger("UnitIdle 2. UnitDefs[" .. tostring(defID) .. "].translatedHumanName=" .. tostring(UnitDefs[defID].translatedHumanName) .. ", unitID=" .. tostring(unitID) .. ", unitTeam=" .. tostring(teamID)) end
@@ -1232,9 +1310,43 @@ function widget:UnitIdle(unitID, defID, teamID)
     if debug then debugger("UnitIdle 4. Going to setIdle. UnitDefs[" .. tostring(defID) .. "].translatedHumanName=" .. tostring(UnitDefs[defID].translatedHumanName) .. ", unitID=" .. tostring(unitID) .. ", unitTeam=" .. tostring(teamID)) end
     unit:setIdle()
     markUnitAsIdle(unitID)
-	end
-end
 
+    -- to call using a variable for method name:
+    -- local aTest = "setIdle"
+    -- unit[aTest](unit, 1234)
+
+	end
+--[[
+  if defID has rules for idle event -- replaces isUnitRelevant()
+    get/create unit
+    unit:setIdle() -- replaces isUnitIdle(unitID), markUnitAsIdle, and maybeMarkUnitAsIdle()
+    add unit to alertQueue -- checks before alerting
+
+    addAlert(unitObj)
+    
+    
+    
+    
+    local eventRules = getEventRules("idle") -- because a unit can belong to multiple types, meaning it could have multiple configurations for an event
+    local mostImportant = 10
+    for each of the unit's types
+      if priority == nil then
+        priority = 5
+      end
+      if priority == 0
+        call alert immediately
+      
+
+        if not already there for same reason
+        addToQueue(unitObj, event, priority)
+
+
+
+
+
+]]
+end
+-- TODO: Needs to setLost()
 function widget:UnitDestroyed(unitID, unitDefID, unitTeam, attackerID, attackerDefID, attackerTeam)
 	-- Triggered when unit dies or construction canceled/destroyed while being built
   if debug then debugger("UnitDestroyed unitID=" .. unitID .. ", translatedHumanName=" .. UnitDefs[unitDefID].translatedHumanName) end
@@ -1388,12 +1500,12 @@ local arr = {"constructor", "radar"}
 -- debugger("units[bUnit.ID]=" .. tostring(bUnit.parent.units[bUnit.ID])) -- should be nil
 -- debugger("parent[constructor][bUnit.ID]=" .. tostring(bUnit.parent["constructor"][bUnit.ID])) -- should be nil
 -- debugger("parent[radar][bUnit.ID]=" .. tostring(bUnit.parent["radar"][bUnit.ID])) -- should be nil
+-- debugger("bUnit.parent.defTypesEventsRules=" .. tableToString(bUnit.parent.defTypesEventsRules))
+-- debugger("enemy defTypesEventsRules=" .. tableToString(teamsManager:getArmyManager(3).defTypesEventsRules))
+-- debugger("1 getOrCreateUnit=" .. teamsManager:getOrCreateUnit(13950, 245, 0).ID)
+-- debugger("2 getOrCreateUnit=" .. teamsManager:getOrCreateUnit(13950, 245, 0).ID)
 
 debug = true
-
--- debugger("bUnit.parent.relTypesRules=" .. tableToString(bUnit.parent.relTypesRules))
--- debugger("enemy relTypesRules=" .. tableToString(teamsManager:getArmyManager(3).relTypesRules))
-
 
 
 debug = false
