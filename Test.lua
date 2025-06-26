@@ -43,17 +43,19 @@ local trackAllAlliedUnitsRules = {} --
 
 -- Newly added event types will need to be added here
 local validEvents = {"idle","damaged","destroyed","created","finished","los","enteredAir","stockpile","thresholdHP"}
-local validEventRules = {"maxTimes", "reAlertSec", "mark", "ping", "alertSound", "threshMinPerc", "threshMaxPerc", "priority"}
+local validEventRules = {"maxTimes", "reAlertSec", "mark", "ping", "alertSound", "threshMinPerc", "threshMaxPerc", "priority"} -- maxQueueTime?
+-- mark = only you see. ping = ALL ALLIES see it. Be careful with ping
 -- Priority from 0-10, default 5. 0 ignores minSecsBetweenNotifications
+-- When a unit has 2+ types, both with rules for the same event (like idle), the event with the highest priority is always used. If all have same priority, probably randomly chosen
 
 
 -- TODO: create rules for below types in makeRelTeamDefsRules()  #####################
+-- TODO: Maybe make threshold a rule instead of event?
 
 -- multiple event rules allowed, but must be unique. Example: myCommanderRules can'the have 2 "idle", but can have all events: idle, damaged, and finished...
+-- units can have multiple types, like making the commander also have the constructor type. makeRelTeamDefsRules() is used to do that.
 -- {type = {event = {rules}}}
--- units can have multiple types. makeRelTeamDefsRules() is used to do that.
--- mark = only you see. ping = ALL ALLIES see it. Be careful with ping
-local myCommanderRules = {damaged = {maxTimes=0, reAlertSec=30, mark=nil, alertSound="sounds/commands/cmd-selfd.wav"}, thresholdHP = {maxTimes=0, reAlertSec=60, mark=nil, alertSound="sounds/commands/cmd-selfd.wav", threshMinPerc=.5, priority=0} } -- idle = {maxTimes=0, reAlertSec=15, mark=nil, alertSound="sounds/commands/cmd-selfd.wav"},  will sound alert when Commander idle/15 secs, (re)damaged once per 30 seconds (unlimited), and when damage causes HP to be under 50%
+local myCommanderRules = {idle = {priority=2, maxTimes=0, reAlertSec=15, mark=nil, alertSound="sounds/commands/cmd-selfd.wav"}, damaged = {maxTimes=0, reAlertSec=30, mark=nil, alertSound="sounds/commands/cmd-selfd.wav"}, thresholdHP = {maxTimes=0, reAlertSec=60, mark=nil, alertSound="sounds/commands/cmd-selfd.wav", threshMinPerc=.5, priority=0} } -- idle = {maxTimes=0, reAlertSec=15, mark=nil, alertSound="sounds/commands/cmd-selfd.wav"},  will sound alert when Commander idle/15 secs, (re)damaged once per 30 seconds (unlimited), and when damage causes HP to be under 50%
 local myConstructorRules = {idle = {maxTimes=0, reAlertSec=15, mark=nil, alertSound="sounds/commands/cmd-selfd.wav"}, destroyed = {maxTimes=0, reAlertSec=1, mark="Con Lost", alertSound=nil}}
 local myFactoryRules = {idle = {maxTimes=0, reAlertSec=15, mark=nil, alertSound="sounds/commands/cmd-selfd.wav"}}
 local myRezBotRules = {idle = {maxTimes=0, reAlertSec=15, mark=nil, alertSound="sounds/commands/cmd-selfd.wav"}}
@@ -217,6 +219,19 @@ local function tableToString(tbl, indent)
   end
   str = str .. string.rep(".", indent) .. "}"
   return str
+end
+
+local function concatenateKeyValuePairs(table, keySep, sep)
+  keySep = keySep or "="
+  sep = sep or ", "
+  local result = ""
+  for k, v in pairs(table) do
+    Spring.Echo("conc1: k=" .. tostring(k) .. ", v=" .. tostring(v))
+    result = result .. tostring(k) .. keySep .. tostring(v) .. ", "
+  end
+  result = string.sub(result, 1, -3)  -- Remove the trailing ", "
+  Spring.Echo("conc2 result: " .. result)
+  return result
 end
 
 -- ################################################# Prototypes starts here #################################################
@@ -694,10 +709,11 @@ function pArmyManager:getOrCreateUnit(unitID, defID)
   return self:getUnit(unitID) or self:createUnit(unitID, defID)
 end
 
-function pArmyManager:getTypesRulesForEvent(defID, event) -- defID, string event. Returns 0 to many types with ONLY their MATCHING EVENTS: {type1 = {event = {rules}}, type2 = {event = {rules}}}
-  if debug or self.debug then debugger("pArmyManager:getTypesRulesForEvent 1. type defID=" .. tostring(defID) .. ", event=" .. tostring(event)) end
-  if type(defID) ~= "number" or type(event) ~= "string" then
+function pArmyManager:getTypesRulesForEvent(defID, event, topPriorityOnly) -- defID, string event, bool/nil (default false) topPriorityOnly. Returns 0 to many types with ONLY their MATCHING EVENTS: {type1 = {event = {rules}}, type2 = {event = {rules}}}
+  if debug or self.debug then debugger("pArmyManager:getTypesRulesForEvent 1. type defID=" .. tostring(defID) .. ", event=" .. tostring(event) .. ", topPriorityOnly=" .. tostring(topPriorityOnly)) end
+  if type(defID) ~= "number" or type(event) ~= "string" or (type(topPriorityOnly) ~= "boolean" and topPriorityOnly ~= nil) then
     debugger("pArmyManager:getTypesRulesForEvent 2. ERROR. defID NOT number or event not string. defID=" .. tostring(defID) .. ", event=" .. tostring(event))
+    return nil
   end
   local typesEventRules = self.defTypesEventsRules[defID] -- {defID = {type = {event = {rules}}}}
   if typesEventRules == nil or (type(typesEventRules) == "table" and next(typesEventRules) == nil) then
@@ -709,21 +725,45 @@ function pArmyManager:getTypesRulesForEvent(defID, event) -- defID, string event
   end
   local typesWithEventRules = {}
   local matches = 0
+  local priorityNum = nil
   for aType, eventsTbl in pairs(typesEventRules) do -- {type = {event = {rules}}}
     if debug then debugger("pArmyManager:getTypesRulesForEvent 5. aType=" .. tostring(aType) .. ", typesEventRules=" .. type(eventsTbl) .. ", event=" .. tostring(event)) end
-    local eventMatch = eventsTbl[event]
-    if type(eventMatch) == "table" and next(eventMatch) ~= nil then
-      if debug then debugger("pArmyManager:getTypesRulesForEvent 6. Adding match to array. aType=" .. tostring(aType) .. ", event=" .. tostring(event)) end
-      typesWithEventRules[aType] = {[event] = eventMatch}
-      matches = matches + 1
+    if type(eventsTbl) ~= "table" then
+      if debug then debugger("pArmyManager:getTypesRulesForEvent 6. Events NOT a table. Will continue to look for other good ones. aType=" .. tostring(aType) .. ", typesEventRules=" .. type(eventsTbl) .. ", event=" .. tostring(event)) end
+    else
+      local eventMatch = eventsTbl[event]
+      if type(eventMatch) == "table" and next(eventMatch) ~= nil then
+        if type(eventMatch["priority"]) ~= "number" then
+          eventMatch["priority"] = 5
+        end
+        if not topPriorityOnly then
+          if debug then debugger("pArmyManager:getTypesRulesForEvent 7. Adding match to tmpEventTbl. aType=" .. tostring(aType) .. ", event=" .. tostring(event)) end
+          typesWithEventRules[aType] = {[event] = eventMatch}
+          matches = matches + 1
+        else
+          local tmpType, tmpEventTbl = next(typesWithEventRules)
+          if type(priorityNum) == "number" and eventMatch["priority"] < priorityNum and tmpType then
+            if debug then debugger("pArmyManager:getTypesRulesForEvent 8. Removing previous topPriority typeTbl. priorityNum=" .. tostring(priorityNum) .. ", eventMatch[priority]=" .. tostring(eventMatch["priority"]) .. ", tmpType=" .. tostring(tmpType)) end
+            typesWithEventRules[tmpType] = nil
+            matches = 0
+          end
+          tmpType, tmpEventTbl = next(typesWithEventRules)
+          if type(tmpType) == "nil" or type(tmpEventTbl) == "nil" then
+            priorityNum = eventMatch["priority"]
+            if debug then debugger("pArmyManager:getTypesRulesForEvent 9. Adding new topPriority typeTbl to array. type tmpType=" .. type(tmpType) .. ", type tmpEventTbl=" .. type(tmpEventTbl)) end
+            typesWithEventRules[aType] = {[event] = eventMatch}
+            matches = 1
+          end
+        end
+      end
     end
   end
   if matches == 0 then
-    if debug then debugger("pArmyManager:getTypesRulesForEvent 7. No matches, returning nil. event=" .. tostring(event) .. ", typesEventRules=" .. tableToString(typesWithEventRules)) end
+    if debug then debugger("pArmyManager:getTypesRulesForEvent 10. No matches, returning nil. event=" .. tostring(event) .. ", typesEventRules=" .. tableToString(typesWithEventRules)) end
     return nil
   end
-  if debug then debugger("pArmyManager:getTypesRulesForEvent 8. Returning matches=" .. tostring(matches) .. ", event=" .. tostring(event) .. ", typesEventRules=" .. tableToString(typesWithEventRules)) end
-  return typesWithEventRules
+  if debug then debugger("pArmyManager:getTypesRulesForEvent 11. Returning matches=" .. tostring(matches) .. ", event=" .. tostring(event) .. ", typesEventRules=" .. tableToString(typesWithEventRules)) end
+  return typesWithEventRules -- {type = {event = {rules}}}
 end
 
 function pArmyManager:hasTypeRules(defID)
@@ -899,12 +939,12 @@ function pUnit:setLost(destroyed)
   local unitTypes = self:getTypesRules() -- {type = {event = {rules}}}} -- Remove unit from all Type/Event lists in parent army (except Lost)
   if debug or self.debug then debugger("setLost 4. About to try removing unit from all Type/Event lists in parent army (except Lost). translatedHumanName=" .. tostring(UnitDefs[self.defID].translatedHumanName) .. ", type(unitTypes)=".. type(unitTypes)) end
   if type(unitTypes) == "table" then
-    for aType, event in pairs(unitTypes) do
+    for aType, eventTbl in pairs(unitTypes) do
       if type(aType) == "string" and type(self.parent[aType]) == "table" and self.parent[aType][self.ID] ~= nil then
-        if debug or self.debug then debugger("setLost 5. Removed self from parent[" .. tostring(aType) .. "] translatedHumanName=" .. tostring(UnitDefs[self.defID].translatedHumanName)) end
+        if debug or self.debug then debugger("setLost 5. Removed self from parent[" .. tostring(aType) .. "] translatedHumanName=" .. tostring(UnitDefs[self.defID].translatedHumanName) .. ", type(eventTbl)=" .. type(eventTbl)) end
         self.parent[aType][self.ID] = nil
-        if type(event) == "table" then
-          for anEvent, rules in pairs(event) do
+        if type(eventTbl) == "table" then
+          for anEvent, rules in pairs(eventTbl) do
             if type(anEvent) == "string" and type(self.parent[anEvent]) == "table" and self.parent[anEvent][self.ID] ~= nil then
               self.parent[anEvent][self.ID] = nil
               if debug or self.debug then debugger("setLost 6. Removed self from parent[" .. tostring(anEvent) .. "], translatedHumanName=" .. tostring(UnitDefs[self.defID].translatedHumanName)) end
@@ -947,9 +987,9 @@ function pUnit:getTypesRules(types) -- Nil for all, string for one, or array of 
   end
 end
 
-function pUnit:getTypesRulesForEvent(event) -- defID, string event. Returns 0 to many types with ONLY their MATCHING EVENTS: {type1 = {event = {rules}}, type2 = {event = {rules}}}
-  if debug or self.debug then debugger("pUnit:getTypesRulesForEvent 1. Returning self.parent:getTypesRulesForEvent(" .. tostring(self.defID) .. "," .. tostring(event) .. "), " .. tostring(self.ID) .. ", teamID=".. tostring(self.parent.teamID)) end
-  return self.parent:getTypesRulesForEvent(self.defID, event)
+function pUnit:getTypesRulesForEvent(event, topPriorityOnly) -- defID, string event. Returns 0 to many types with ONLY their MATCHING EVENTS: {type1 = {event = {rules}}, type2 = {event = {rules}}}
+  if debug or self.debug then debugger("pUnit:getTypesRulesForEvent 1. Returning self.parent:getTypesRulesForEvent(" .. tostring(self.defID) .. ", event=" .. tostring(event) .. ", topPriorityOnly=" .. tostring(topPriorityOnly) .. "), unitID=" .. tostring(self.ID) .. ", teamID=".. tostring(self.parent.teamID)) end
+  return self.parent:getTypesRulesForEvent(self.defID, event, topPriorityOnly)
 end
 
 -- ################################################## Custom/Expanded Unit methods starts here #################################################
@@ -1097,17 +1137,60 @@ end
 
 -- TODO: Is this really needed? This is more for debugging in case someone messes up event definitions.
 -- Maybe have it just test all rules at once?
-local function validEventRule(rule)
-  if debug then debugger("validEvent 1. event=" .. tostring(rule)) end
-  -- ### Stub. Would need revamp to validate that each rule has expected values
-  for _, value in ipairs(validEventRules) do
-    if value == rule then
-      return true
+
+local function validTypeEventRulesTbls(typeTbl)
+  if debug then debugger("validTypeEventRulesTbls 1. event=" .. type(typeTbl)) end
+  if type(typeTbl) ~= "table" then
+    debugger("validTypeEventRulesTbls 2. ERROR. Returning False. Bad part value or not eventTbl=" .. type(typeTbl))
+    return false
+  end
+  local badValue = nil
+  for aType,eventTbl in pairs(typeTbl) do -- Types not tracked. If needed, add later
+    if type(eventTbl) ~= "table" then
+      debugger("validTypeEventRulesTbls 3. ERROR. Returning False. Not Table eventTbl=" .. type(eventTbl))
+      return false
+    end
+    for anEvent,rulesTbl in pairs(eventTbl) do
+      badValue = anEvent
+      local eventMatch = false
+      for i,v in ipairs(validEvents) do
+        if anEvent == v then
+          eventMatch = true
+          badValue = nil
+          break
+        end
+      end
+      if eventMatch == false then
+        debugger("validTypeEventRulesTbls 4. ERROR. Returning False. Bad value=" .. tostring(badValue) .. " in eventTbl=" .. tableToString(eventTbl))
+        return false
+      end
+      if type(rulesTbl) ~= "table" then
+        debugger("validTypeEventRulesTbls 4. ERROR. Returning False. Not Table rulesTbl=" .. type(rulesTbl))
+        return false
+      end
+      for aRule,_ in pairs(rulesTbl) do
+        badValue = aRule
+        local ruleMatch = false
+        for i2,v2 in ipairs(validEventRules) do
+          if aRule == v2 then
+            ruleMatch = true
+            badValue = nil
+            break
+          end
+        end
+        if ruleMatch == false then
+          debugger("validTypeEventRulesTbls 5. ERROR. Returning False. Bad value=" .. tostring(badValue) .. " in rulesTbl=" .. tableToString(rulesTbl))
+          return false
+        end
+      end
     end
   end
-  debugger("validEvent 2. ERROR. INVALID event=" .. tostring(rule))
-  return false
+  if debug then debugger("validTypeEventRulesTbls 6. SUCCESS.") end
+  return true
 end
+-- local validEvents = {"idle","damaged","destroyed","created","finished","los","enteredAir","stockpile","thresholdHP"}
+-- local validEventRules = {"maxTimes", "reAlertSec", "mark", "ping", "alertSound", "threshMinPerc", "threshMaxPerc","priority"}
+
 -- ################################################# Idle Alerts start here #################################################
 
 
@@ -1232,8 +1315,6 @@ local function hasEventAlerts(unitID, defID, teamID, event)
   
 
 end
--- local validEvents = {"idle","damaged","destroyed","created","finished","los","enteredAir","stockpile","thresholdHP"}
--- local validEventRules = {"maxTimes", "reAlertSec", "mark", "ping", "alertSound", "threshMinPerc", "threshMaxPerc","priority"}
 
 -- if there's type rules, AND the unit's event matches a type... @@@@@@$$$$$$$$$$$$$$$$##################^^^^^^^^^^^^^^^^^^^^%%%%%%%%%%%%%%%%%%
 -- build logic for maxTimes=0, reAlertSec=15, mark=nil, alertSound="sounds/commands/cmd-selfd.wav" (Track in armyManager or teamsManager?) Stored how?
@@ -1443,7 +1524,6 @@ function widget:UnitFinished(unitID, defID, teamID, builderID)
 
   -- TODO: How to get commander when spawns in? UnitCreated ?
 
--- START HERE. WORK ON BELOW
   local army = teamsManager:getArmyManager(teamID)
   if army and army:hasTypeRules(defID) then
     army:getOrCreateUnit(unitID, defID):getIdle()
@@ -1457,12 +1537,13 @@ function widget:Initialize()
 	if isSpectator then
 		return
 	end
+  -- loadAllExistingUnits #############
   -- if Spring.GetGameSeconds() > 1 then
   --   -- TODO: Load All Units if replay or starting mid-game ########## 
   -- end
 end
 
-local function checkQueuesOfInactiveUnits()
+local function checkQueuesOfInactiveUnits() -- Only checks units with idle event rules and are in the parent["idle"] table
   if debug then debugger("checkQueuesOfInactiveUnits 1.") end
   if type(teamsManager.myArmyManager["idle"]) == "table" then
     for unitID, unit in pairs(teamsManager.myArmyManager["idle"]) do
@@ -1481,6 +1562,11 @@ local function checkQueuesOfInactiveUnits()
 	-- 		markUnitAsNotIdle(unitID)
 	-- 	end
 	-- end
+end
+
+function widget:UnitDamaged(unitID, unitDefID, unitTeam, damage, paralyzer, weaponDefID, projectileID, attackerID, attackerDefID, attackerTeam)
+
+  -- sends destroyed AND "thresholdHP"
 end
 
 local function checkQueuesOfFactories()
@@ -1509,7 +1595,7 @@ function widget:CommandsChanged() -- Called when the command descriptions change
     for unitID, unit in pairs(teamsManager.myArmyManager["factory"]) do
       if debug then debugger("CommandsChanged 2. unitID=" .. unitID .. ", defID=" .. unit.defID .. ", isFactory=" .. tostring(unit.isFactory) .. ", translatedHumanName=" .. tostring(UnitDefs[unit.defID].translatedHumanName)) end
       if unit:getIdle() == true then
-        if debug then debugger("CommandsChanged 3. Factory idle. unitID=" .. unitID .. ", defID=" .. unit.defID) end
+        if debug then debugger("CommandsChanged 3. Factory added to parent[idle] table. unitID=" .. unitID .. ", defID=" .. unit.defID) end
         -- markUnitAsIdle(unitID)
       else
         if debug then debugger("CommandsChanged 4. Factory NOT idle. unitID=" .. unitID .. ", defID=" .. unit.defID) end
@@ -1519,7 +1605,7 @@ function widget:CommandsChanged() -- Called when the command descriptions change
   end
   -- checkQueuesOfFactories()
 end
-
+-- figure out logic for if new alert is added to queue
 function widget:GameFrame(frame)
   -- if warnFrame >= 1 then -- with 30 UpdateInterval, would run every half second
   if idlingUnitCount > 0 then -- or numAlerts > 0 
@@ -1541,27 +1627,75 @@ function widget:Shutdown()
 	Spring.Echo(widgetName .. " widget disabled")
 end
 
-
-
-local function concatenateKeyValuePairs(table, keySep, sep)
-  keySep = keySep or "="
-  sep = sep or ", "
-  local result = ""
-  for k, v in pairs(table) do
-    Spring.Echo("conc1: k=" .. tostring(k) .. ", v=" .. tostring(v))
-    result = result .. tostring(k) .. keySep .. tostring(v) .. ", "
+-- ############################################################# Alerts Section ###########################################
+-- {defID = {type = {event = {rules}}}}
+-- components: {type = {event = {rules}
+local function addUnitAlert(typeEventRulesTbl, unitObj) -- Use pUnitMgr or pArmyMgr :getTypesRulesForEvent() with topPriorityOnly = true
+  if debug then debugger("addUnitAlert 1. ") end
+  if validTypeEventRulesTbls(typeEventRulesTbl) == false or type(unitObj) ~= "table" then
+    debugger("addUnitAlert 2. ERROR, returning nil. NOT unitObj or validTypeEventRulesTbls=" .. type(validTypeEventRulesTbls) .. ", unitObj=" .. type(unitObj))
+    return nil
   end
-  result = string.sub(result, 1, -3)  -- Remove the trailing ", "
-  Spring.Echo("conc2 result: " .. result)
-  return result
+
+
+
+
 end
+-- local validEvents = {"idle","damaged","destroyed","created","finished","los","enteredAir","stockpile","thresholdHP"}
+-- local validEventRules = {"maxTimes", "reAlertSec", "mark", "ping", "alertSound", "threshMinPerc", "threshMaxPerc","priority"}
+
+-- Before adding to queue, check unit's event last notify to ensure it isn't too soon
+  -- Store/Track how?
+-- If already in queue for same event with higher priority?
+  -- Remove old and add higher prioritization
+-- If alreay in queue for same event
+  -- reject new
+-- If already in queue for different event?
+  -- Add it, but have something in place to check before adding it
+
+-- If 0 priority damage/thresholdHP alert, remove other damage from queue 
+-- If in queue and destroyed/lost, remove from queue, or it pulls new units until unit.isLost = false
+
+-- Rule to treat all of the same type as one unit, in terms of alerts. If any notify, keeps others from doing same for reAlertSec
+
+-- In queue too long? maxQueueTime?
+
+local function addAlert() -- placeholder for alerts that aren't unit specific
+  if debug then debugger("addAlert 1. ") end
+
+
+
+
+
+
+end
+
+
+local function isAlertQueued()
+  if debug then debugger("isAlertQueued 1. ") end
+
+
+
+
+
+
+end
+
+
+
+
+
+
+
+
+
+
 
 makeRelTeamDefsRules()
 -- debug = true
 teamsManager:makeAllArmies() -- Build all teams/armies
 debug = false
 
--- loadAllExistingUnits
 
 
 -- debugger("isAllied(0,1)=" .. tostring(teamsManager:isAllied(0, 1)))
@@ -1594,10 +1728,14 @@ debug = false
 -- debugger("Army hasTypeRules=" .. tostring(gUnit.parent:hasTypeRules(gUnit.defID)) .. ", name=" .. tostring(UnitDefs[gUnit.defID].translatedHumanName))
 -- debugger("Unit hasTypeRules=" .. tostring(enemyCUnit:hasTypeRules()) .. ", name=" .. tostring(UnitDefs[enemyCUnit.defID].translatedHumanName))
 -- debugger("Unit hasTypeRules=" .. tostring(enemyCUnit:hasTypeRules()) .. ", name=" .. tostring(UnitDefs[enemyCUnit.defID].translatedHumanName))
+-- local typeRules = cUnit:getTypesRulesForEvent("idle")
+-- local typeRules = cUnit:getTypesRules({"commander"})
+-- debugger("validTypeEventRulesTbls=" .. tostring(validTypeEventRulesTbls(typeRules)))
+-- debugger("tableToString=" .. tableToString(typeRules))
 
 
 -- local searchTxt = "Commander"
--- local aTeamNum = 2
+-- local aTeamNum = 0
 -- for unitDefID, unitDef in pairs(UnitDefs) do
 --   if string.find(UnitDefs[unitDefID].translatedHumanName:lower(), searchTxt:lower()) then
 --     -- debugger(searchTxt .. " defID=" .. unitDefID .. ", name=" .. tostring(UnitDefs[unitDefID].translatedHumanName))
@@ -1608,6 +1746,7 @@ debug = false
 --   end
 -- end
 
+local cUnit = teamsManager:createUnit(19913, 282, 0) -- my Commander
 local aUnit = teamsManager:createUnit(5506, 244, 0) -- T2 Plane Factory
 local bUnit = teamsManager:createUnit(13950, 245, 0) -- Adv. Con plane
 local gUnit = teamsManager:createUnit(25549, 251, 0) -- Adv. Geothermal
@@ -1617,11 +1756,12 @@ local allyCUnit = teamsManager:createUnit(425, 49, 1) -- Ally Commander
 
 local enemyCUnit = teamsManager:createUnit(24908, 49, 2) -- Enemy Commander
 
-
 -- TestingArea
 debug = true
 -- aUnit.debug = true
 
+cUnit:setLost(false)
+debugger("unitsLost[bUnit.ID]=" .. type(cUnit.parent.unitsLost[cUnit.ID]))
 
 debug = false
 if aUnit ~= nil then
