@@ -43,7 +43,8 @@ local trackAllAlliedUnitsRules = {} --
 
 -- Newly added event types will need to be added here
 local validEvents = {"idle","damaged","destroyed","created","finished","los","enteredAir","stockpile","thresholdHP"}
-local validEventRules = {"maxTimes", "reAlertSec", "mark", "ping", "alertSound", "threshMinPerc", "threshMaxPerc", "priority"} -- maxQueueTime?
+local validEventRules = {"sharedAlerts", "priority", "reAlertSec", "maxAlerts", "maxQueueTime", "alertSound", "mark", "ping", "threshMinPerc", "threshMaxPerc"} -- if sharedAlerts it also contains: alertCount, lastNotify. ELSE these are stored in the unit with unitObj.lastAlerts[unitType][event] = {lastNotify=num,alertCount=num} 
+-- most validEventRules are used in getEventRulesNotifyVars(typeEventRulesTbl, unitObj)
 -- mark = only you see. ping = ALL ALLIES see it. Be careful with ping
 -- Priority from 0-10, default 5. 0 ignores minSecsBetweenNotifications
 -- When a unit has 2+ types, both with rules for the same event (like idle), the event with the highest priority is always used. If all have same priority, probably randomly chosen
@@ -55,13 +56,13 @@ local validEventRules = {"maxTimes", "reAlertSec", "mark", "ping", "alertSound",
 -- multiple event rules allowed, but must be unique. Example: myCommanderRules can'the have 2 "idle", but can have all events: idle, damaged, and finished...
 -- units can have multiple types, like making the commander also have the constructor type. makeRelTeamDefsRules() is used to do that.
 -- {type = {event = {rules}}}
-local myCommanderRules = {idle = {priority=2, maxTimes=0, reAlertSec=15, mark=nil, alertSound="sounds/commands/cmd-selfd.wav"}, damaged = {maxTimes=0, reAlertSec=30, mark=nil, alertSound="sounds/commands/cmd-selfd.wav"}, thresholdHP = {maxTimes=0, reAlertSec=60, mark=nil, alertSound="sounds/commands/cmd-selfd.wav", threshMinPerc=.5, priority=0} } -- idle = {maxTimes=0, reAlertSec=15, mark=nil, alertSound="sounds/commands/cmd-selfd.wav"},  will sound alert when Commander idle/15 secs, (re)damaged once per 30 seconds (unlimited), and when damage causes HP to be under 50%
-local myConstructorRules = {idle = {maxTimes=0, reAlertSec=15, mark=nil, alertSound="sounds/commands/cmd-selfd.wav"}, destroyed = {maxTimes=0, reAlertSec=1, mark="Con Lost", alertSound=nil}}
-local myFactoryRules = {idle = {maxTimes=0, reAlertSec=15, mark=nil, alertSound="sounds/commands/cmd-selfd.wav"}}
-local myRezBotRules = {idle = {maxTimes=0, reAlertSec=15, mark=nil, alertSound="sounds/commands/cmd-selfd.wav"}}
-local myMexRules = {destroyed = {maxTimes=0, reAlertSec=1, mark="Mex Lost", alertSound=nil}}
-local myEnergyGenRules = {finished = {maxTimes=0, reAlertSec=1, mark=nil, alertSound=nil}, destroyed = {maxTimes=0, reAlertSec=1, mark=nil, alertSound=nil}} -- reAlertSec only used if mark/sound wanted. Saved so custom code can do something with the information.
-local myRadarRules = {finished = {maxTimes=0, reAlertSec=1, mark="Radar Built", alertSound="sounds/commands/cmd-selfd.wav"}, destroyed = {maxTimes=0, reAlertSec=1, mark="Radar Lost", alertSound="sounds/commands/cmd-selfd.wav"}}
+local myCommanderRules = {idle = {priority=2, maxAlerts=0, reAlertSec=15, mark=nil, alertSound="sounds/commands/cmd-selfd.wav"}, damaged = {maxAlerts=0, reAlertSec=30, mark=nil, alertSound="sounds/commands/cmd-selfd.wav"}, thresholdHP = {maxAlerts=0, reAlertSec=60, mark=nil, alertSound="sounds/commands/cmd-selfd.wav", threshMinPerc=.5, priority=0} } -- idle = {maxAlerts=0, reAlertSec=15, mark=nil, alertSound="sounds/commands/cmd-selfd.wav"},  will sound alert when Commander idle/15 secs, (re)damaged once per 30 seconds (unlimited), and when damage causes HP to be under 50%
+local myConstructorRules = {idle = {maxAlerts=0, reAlertSec=15, mark=nil, alertSound="sounds/commands/cmd-selfd.wav"}, destroyed = {maxAlerts=0, reAlertSec=1, mark="Con Lost", alertSound=nil}}
+local myFactoryRules = {idle = {maxAlerts=0, reAlertSec=15, mark=nil, alertSound="sounds/commands/cmd-selfd.wav"}}
+local myRezBotRules = {idle = {maxAlerts=0, reAlertSec=15, mark=nil, alertSound="sounds/commands/cmd-selfd.wav"}}
+local myMexRules = {destroyed = {maxAlerts=0, reAlertSec=1, mark="Mex Lost", alertSound=nil}}
+local myEnergyGenRules = {finished = {maxAlerts=0, reAlertSec=1, mark=nil, alertSound=nil}, destroyed = {maxAlerts=0, reAlertSec=1, mark=nil, alertSound=nil}} -- reAlertSec only used if mark/sound wanted. Saved so custom code can do something with the information.
+local myRadarRules = {finished = {maxAlerts=0, reAlertSec=1, mark="Radar Built", alertSound="sounds/commands/cmd-selfd.wav"}, destroyed = {maxAlerts=0, reAlertSec=1, mark="Radar Lost", alertSound="sounds/commands/cmd-selfd.wav"}}
 -- local myRules = 
 -- To mitigate performance hits from "UnitDamaged()", could have a list of types/groups to check once every X frames/seconds
 local trackMyTypesRules = {
@@ -76,9 +77,9 @@ local trackMyTypesRules = {
 local allyCommanderRules = {} -- Won't track
 local allyConstructorRules = {}
 local allyFactoryRules = {}
-local allyFactoryT2Rules = {finished = {maxTimes=1, reAlertSec=15, mark="T2 Ally", alertSound=nil}} -- So you know to badger them for a T2 constructor ;)
+local allyFactoryT2Rules = {finished = {maxAlerts=1, reAlertSec=15, mark="T2 Ally", alertSound=nil}} -- So you know to badger them for a T2 constructor ;)
 local allyRezBotRules = {}
-local allyMexRules = {destroyed = {maxTimes=0, reAlertSec=1, mark="Ally Mex Lost", alertSound=nil}}
+local allyMexRules = {destroyed = {maxAlerts=0, reAlertSec=1, mark="Ally Mex Lost", alertSound=nil}}
 local allyEnergyGenRules = {}
 local allyRadarRules = {}
 -- local allyRules = 
@@ -92,12 +93,12 @@ local trackAllyTypesRules = {
 	energyGen = allyEnergyGenRules,
 	radar = allyRadarRules
 }
-local enemyCommanderRules = {los = {maxTimes=0, reAlertSec=30, mark="Commander", alertSound=nil, priority=0} } -- will mark "Commander" at location when (re)enters LoS, once per 30 seconds (unlimited)
+local enemyCommanderRules = {los = {maxAlerts=0, reAlertSec=30, mark="Commander", alertSound=nil, priority=0} } -- will mark "Commander" at location when (re)enters LoS, once per 30 seconds (unlimited)
 local enemyConstructorRules = {}
 local enemyFactoryRules = {}
-local enemyFactoryT2Rules = {los = {maxTimes=1, reAlertSec=15, mark="T2 enemy", alertSound=nil}} -- Hope you're ready!
+local enemyFactoryT2Rules = {los = {maxAlerts=1, reAlertSec=15, mark="T2 enemy", alertSound=nil}} -- Hope you're ready!
 local enemyRezBotRules = {}
-local enemyMexRules = {destroyed = {maxTimes=0, reAlertSec=1, mark=nil, alertSound=nil}} -- No alert means it only destroyed enemy mex will be tracked. To have it track alive mex, use "los"
+local enemyMexRules = {destroyed = {maxAlerts=0, reAlertSec=1, mark=nil, alertSound=nil}} -- No alert means it only destroyed enemy mex will be tracked. To have it track alive mex, use "los"
 local enemyEnergyGenRules = {}
 local enemyRadarRules = {}
 local enemyUnitsT2Rules = {}
@@ -171,6 +172,9 @@ local spGetUnitHealth = Spring.GetUnitHealth
 local UpdateInterval = 30
 local TestSound = 'sounds/commands/cmd-selfd.wav'
 
+table.insert(validEventRules,"lastNotify") -- add system only rules
+table.insert(validEventRules,"alertCount") -- add system only rules
+
 local myTeamID = Spring.GetMyTeamID()
 local isSpectator
 local warnFrame = 0
@@ -234,6 +238,80 @@ local function concatenateKeyValuePairs(table, keySep, sep)
   return result
 end
 
+local priorityQueue = {}
+priorityQueue.__index = priorityQueue
+function priorityQueue:new()
+  local queue = {
+    heap = {},
+    size = 0
+  }
+  return setmetatable(queue, self)
+end
+-- validEventRules = {"sharedAlerts", "priority", "reAlertSec", "maxAlerts", "maxQueueTime", "alertSound", "mark", "ping", "threshMinPerc", "threshMaxPerc"} -- if sharedAlerts it also contains: alertCount, lastNotify. ELSE these are stored in the unit with unitObj.lastAlerts[unitType][event] = {lastNotify=num,alertCount=num} 
+function priorityQueue:insert(value, priority, alertRulesTbl) -- Inserts a new element with the given priority.
+  self.size = self.size + 1
+  self.heap[self.size] = {value = value, priority = priority, alertRulesTbl = alertRulesTbl, queuedTime = Spring.GetGameSeconds()} -- unitType, event, "maxQueueTime", "alertSound", "mark", "ping", "threshMinPerc", "threshMaxPerc"
+  self:_swim(self.size)
+end
+
+function priorityQueue:pull() -- Retrieves and removes the element with the highest priority.
+  if self:isEmpty() then
+    return nil, nil
+  end
+  local top = self.heap[1]
+  if self.size > 1 then
+    self.heap[1] = self.heap[self.size]
+    self.heap[self.size] = nil
+    self.size = self.size - 1
+    self:_sink(1)
+  else
+    self.heap[1] = nil
+    self.size = 0
+  end
+  return top.value, top.priority
+end
+
+function priorityQueue:peek() -- Returns the element with the highest priority without removing it.
+  if self:isEmpty() then
+    return nil, nil
+  end
+  return self.heap[1].value, self.heap[1].priority
+end
+
+function priorityQueue:getSize() -- Returns the number of elements in the queue.
+  return self.size
+end
+
+function priorityQueue:isEmpty() -- Returns true if the queue is empty, false otherwise.
+  return self.size == 0
+end
+
+function priorityQueue:__lessThan(i, j) -- Helper functions for heap operations (min-heap)
+  return self.heap[i].priority < self.heap[j].priority
+end
+function priorityQueue:_swap(i, j)
+  self.heap[i], self.heap[j] = self.heap[j], self.heap[i]
+end
+function priorityQueue:_swim(k)
+  while k > 1 and self:__lessThan(k, math.floor(k / 2)) do
+    self:_swap(k, math.floor(k / 2))
+    k = math.floor(k / 2)
+  end
+end
+function priorityQueue:_sink(k)
+  while 2 * k <= self.size do
+    local j = 2 * k
+    if j < self.size and self:__lessThan(j + 1, j) then
+      j = j + 1
+    end
+    if not self:__lessThan(j, k) then
+      break
+    end
+    self:_swap(k, j)
+    k = j
+  end
+end
+local alertQueue = priorityQueue:new()
 -- ################################################# Prototypes starts here #################################################
 -- type(nil) would return "nil", and type(false) would return "boolean". If there is need to differentiate
 local function debugger(...)
@@ -743,14 +821,14 @@ function pArmyManager:getTypesRulesForEvent(defID, event, topPriorityOnly) -- de
         else
           local tmpType, tmpEventTbl = next(typesWithEventRules)
           if type(priorityNum) == "number" and eventMatch["priority"] < priorityNum and tmpType then
-            if debug then debugger("pArmyManager:getTypesRulesForEvent 8. Removing previous topPriority typeTbl. priorityNum=" .. tostring(priorityNum) .. ", eventMatch[priority]=" .. tostring(eventMatch["priority"]) .. ", tmpType=" .. tostring(tmpType)) end
+            if debug then debugger("pArmyManager:getTypesRulesForEvent 8. Removing previous topPriority tmpType=" .. tostring(tmpType) .. ", priorityNum=" .. tostring(priorityNum) .. ", because new priorityNum=" .. tostring(eventMatch["priority"])) end
             typesWithEventRules[tmpType] = nil
             matches = 0
           end
           tmpType, tmpEventTbl = next(typesWithEventRules)
           if type(tmpType) == "nil" or type(tmpEventTbl) == "nil" then
             priorityNum = eventMatch["priority"]
-            if debug then debugger("pArmyManager:getTypesRulesForEvent 9. Adding new topPriority typeTbl to array. type tmpType=" .. type(tmpType) .. ", type tmpEventTbl=" .. type(tmpEventTbl)) end
+            if debug then debugger("pArmyManager:getTypesRulesForEvent 9. Adding new topPriority typeTbl to array. type aType=" .. tostring(aType) .. ", with priorityNum=" .. tostring(priorityNum)) end
             typesWithEventRules[aType] = {[event] = eventMatch}
             matches = 1
           end
@@ -1138,14 +1216,18 @@ end
 -- TODO: Is this really needed? This is more for debugging in case someone messes up event definitions.
 -- Maybe have it just test all rules at once?
 
-local function validTypeEventRulesTbls(typeTbl)
+local function validTypeEventRulesTbls(typeTbl) -- , returnCounts returnCounts returns the count of each type/event/rule
   if debug then debugger("validTypeEventRulesTbls 1. event=" .. type(typeTbl)) end
   if type(typeTbl) ~= "table" then
     debugger("validTypeEventRulesTbls 2. ERROR. Returning False. Bad part value or not eventTbl=" .. type(typeTbl))
     return false
   end
+  local typeCount = 0
+  local eventCount = 0
+  local ruleCount = 0
   local badValue = nil
   for aType,eventTbl in pairs(typeTbl) do -- Types not tracked. If needed, add later
+    typeCount = typeCount +1
     if type(eventTbl) ~= "table" then
       debugger("validTypeEventRulesTbls 3. ERROR. Returning False. Not Table eventTbl=" .. type(eventTbl))
       return false
@@ -1156,6 +1238,7 @@ local function validTypeEventRulesTbls(typeTbl)
       for i,v in ipairs(validEvents) do
         if anEvent == v then
           eventMatch = true
+          eventCount = eventCount +1
           badValue = nil
           break
         end
@@ -1174,6 +1257,7 @@ local function validTypeEventRulesTbls(typeTbl)
         for i2,v2 in ipairs(validEventRules) do
           if aRule == v2 then
             ruleMatch = true
+            ruleCount = ruleCount +1
             badValue = nil
             break
           end
@@ -1185,11 +1269,11 @@ local function validTypeEventRulesTbls(typeTbl)
       end
     end
   end
-  if debug then debugger("validTypeEventRulesTbls 6. SUCCESS.") end
-  return true
+  if debug then debugger("validTypeEventRulesTbls 6. SUCCESS. typeCount=" .. tostring(typeCount) .. ", eventCount=" .. tostring(eventCount) .. ", ruleCount=" .. tostring(ruleCount)) end
+  return true,typeCount,eventCount,ruleCount
 end
--- local validEvents = {"idle","damaged","destroyed","created","finished","los","enteredAir","stockpile","thresholdHP"}
--- local validEventRules = {"maxTimes", "reAlertSec", "mark", "ping", "alertSound", "threshMinPerc", "threshMaxPerc","priority"}
+-- validEvents = {"idle","damaged","destroyed","created","finished","los","enteredAir","stockpile","thresholdHP"}
+-- validEventRules = {"sharedAlerts", "priority", "reAlertSec", "maxAlerts", "maxQueueTime", "alertSound", "mark", "ping", "threshMinPerc", "threshMaxPerc"} -- if sharedAlerts it also contains: alertCount, lastNotify. ELSE these are stored in the unit with unitObj.lastAlerts[unitType][event] = {lastNotify=num,alertCount=num} 
 
 -- ################################################# Idle Alerts start here #################################################
 
@@ -1248,7 +1332,7 @@ local function hasEventAlerts(unitID, defID, teamID, event)
   end
 
   
-  local maxTimes = eventsRulesTbl["maxTimes"]
+  local maxAlerts = eventsRulesTbl["maxAlerts"]
   local reAlertSec = eventsRulesTbl["reAlertSec"]
   local mark = eventsRulesTbl["mark"]
   local ping = eventsRulesTbl["ping"]
@@ -1260,14 +1344,14 @@ local function hasEventAlerts(unitID, defID, teamID, event)
 
   if mark ~= nil or ping ~= nil or alertSound ~= nil then
     if debug then debugger("hasEventAlerts 9. Found 1+ alerts for unitType-event. unitType=" .. tostring(unitType) .. ", eventMatch=" .. type(eventRules) .. ", unitDefID=" .. tostring(defID) .. ", teamID=" .. tostring(teamID) .. ", event=" .. tostring(event)) end
-    if type(maxTimes) ~= "number" or type(reAlertSec) ~= "number" then -- make a function validate this stuff?
-      debugger("hasEventAlerts 10. ERROR. Invalid maxTimes(" .. tostring(maxTimes) .. ") or reAlertSec(" .. tostring(reAlertSec) .. "). Returning nil. unitType=" .. tostring(unitType) .. ", eventMatch=" .. tostring(eventRules) .. ", unitDefID=" .. tostring(defID) .. ", teamID=" .. tostring(teamID) .. ", event=" .. tostring(event))
+    if type(maxAlerts) ~= "number" or type(reAlertSec) ~= "number" then -- make a function validate this stuff?
+      debugger("hasEventAlerts 10. ERROR. Invalid maxAlerts(" .. tostring(maxAlerts) .. ") or reAlertSec(" .. tostring(reAlertSec) .. "). Returning nil. unitType=" .. tostring(unitType) .. ", eventMatch=" .. tostring(eventRules) .. ", unitDefID=" .. tostring(defID) .. ", teamID=" .. tostring(teamID) .. ", event=" .. tostring(event))
       return nil
     end
 
     -- should type tags be added to units? Could be useful. 
 
-    -- If numPastNotify <= maxTimes and isQueued(uType, event)
+    -- If numPastNotify <= maxAlerts and isQueued(uType, event)
       -- if "priority" == 0 or "0" then 
         -- notify() 
       -- else
@@ -1275,7 +1359,7 @@ local function hasEventAlerts(unitID, defID, teamID, event)
           -- Checks all of type before alerting, applies to any of type that meet event-rules. Might use more than one ping
       -- end
       -- 
-    -- How do I track maxTimes? Shouldn't be in the unit's army, as maxTimes would be spread throughout the teams that leaves TeamsManager or MyArmy
+    -- How do I track maxAlerts? Shouldn't be in the unit's army, as maxAlerts would be spread throughout the teams that leaves TeamsManager or MyArmy
     -- Still, how do I track it in one of those? Using the Types/Groups system already built. With myArmyAlertTracking{ [type] = { [event] = {times = #, lastAlert = gameSecs} } }
     -- or with ...Manager.typesAlertNum[type].[event].times = #
   end
@@ -1317,8 +1401,8 @@ local function hasEventAlerts(unitID, defID, teamID, event)
 end
 
 -- if there's type rules, AND the unit's event matches a type... @@@@@@$$$$$$$$$$$$$$$$##################^^^^^^^^^^^^^^^^^^^^%%%%%%%%%%%%%%%%%%
--- build logic for maxTimes=0, reAlertSec=15, mark=nil, alertSound="sounds/commands/cmd-selfd.wav" (Track in armyManager or teamsManager?) Stored how?
--- {destroyed = {maxTimes=0, reAlertSec=1, mark=nil, alertSound=nil}} -- No alert means it only destroyed enemy mex will be tracked. To have it track alive mex, use "los"
+-- build logic for maxAlerts=0, reAlertSec=15, mark=nil, alertSound="sounds/commands/cmd-selfd.wav" (Track in armyManager or teamsManager?) Stored how?
+-- {destroyed = {maxAlerts=0, reAlertSec=1, mark=nil, alertSound=nil}} -- No alert means it only destroyed enemy mex will be tracked. To have it track alive mex, use "los"
 
 -- events: idle,damaged,destroyed,created,finished,los,enteredAir,stockpile,
 
@@ -1630,42 +1714,101 @@ end
 -- ############################################################# Alerts Section ###########################################
 -- {defID = {type = {event = {rules}}}}
 -- components: {type = {event = {rules}
-local function addUnitAlert(typeEventRulesTbl, unitObj) -- Use pUnitMgr or pArmyMgr :getTypesRulesForEvent() with topPriorityOnly = true
-  if debug then debugger("addUnitAlert 1. ") end
-  if validTypeEventRulesTbls(typeEventRulesTbl) == false or type(unitObj) ~= "table" then
-    debugger("addUnitAlert 2. ERROR, returning nil. NOT unitObj or validTypeEventRulesTbls=" .. type(validTypeEventRulesTbls) .. ", unitObj=" .. type(unitObj))
+local function getEventRulesNotifyVars(typeEventRulesTbl, unitObj) -- validates and returns: unitType, event, lastNotify, sharedAlerts, priority, reAlertSec, maxAlerts, alertCount, maxQueueTime, alertSound, mark, ping
+  if debug then debugger("getEventRulesNotifyVars 1. ") end
+  local validTbl,typeCount,eventCount,rulesCount = validTypeEventRulesTbls(typeEventRulesTbl)
+  if validTbl == false or type(unitObj) ~= "table" or unitObj.defID == nil then
+    debugger("getEventRulesNotifyVars 2. ERROR, returning nil. NOT unitObj or validTypeEventRulesTbls=" .. type(validTypeEventRulesTbls) .. ", unitObj=" .. type(unitObj))
     return nil
   end
+  if not validTbl or typeCount ~= 1 or eventCount ~= 1 then
+    debugger("getEventRulesNotifyVars 3. ERROR. Returning nil. Bad typeEventRulesTbl. validTbl=" .. tostring(validTbl) .. ", typeCount=" .. tostring(typeCount) .. ", eventCount=" .. tostring(eventCount) .. ", rulesCount=" .. tostring(rulesCount) .. ", tableToString=" .. tableToString(typeEventRulesTbl))
+    return nil
+  end
+  local unitType, eventTbl = next(typeEventRulesTbl)
+  local event, rulesTbl = next(eventTbl)
 
+  local maxAlerts = rulesTbl["maxAlerts"] or 0
+  local reAlertSec = rulesTbl["reAlertSec"] or 5
+  local priority = rulesTbl["priority"] or 5
+  local maxQueueTime = rulesTbl["maxQueueTime"] or false -- false or number
+  local mark = rulesTbl["mark"] or false -- t/f or string
+  local ping = rulesTbl["ping"] or false -- t/f or string
+  local alertSound = rulesTbl["alertSound"] or false -- false or string
+  local sharedAlerts = rulesTbl["sharedAlerts"] or false -- nil or true
+  if type(maxAlerts) ~= "number" or type(reAlertSec) ~= "number" or type(priority) ~= "number" or ((type(maxQueueTime) ~= "number" and type(maxQueueTime) ~= "boolean") or (type(maxQueueTime) == "boolean" and maxQueueTime ~= false)) or (type(mark) ~= "string" and type(mark) ~= "boolean") or (type(ping) ~= "string" and type(ping) ~= "boolean") or (type(alertSound) ~= "string" and type(alertSound) ~= "boolean") or (type(alertSound) == "boolean" and alertSound ~= false) or type(sharedAlerts) ~= "boolean" then
+    debugger("getEventRulesNotifyVars 4. ERROR. Returning nil. Bad sharedAlerts, mark, ping, alertSound, maxAlerts, reAlertSec or priority=" .. tostring(priority) .. ", reAlertSec=" .. tostring(reAlertSec) .. ", maxAlerts=" .. tostring(maxAlerts) .. ", maxQueueTime=" .. tostring(maxQueueTime) .. ", tableToString=" .. tableToString(typeEventRulesTbl))
+    return nil
+  end
+  if sharedAlerts then
+    local lastSharedNotify = rulesTbl["lastNotify"] or 0 -- nil or GameSec
+    local alertCount = rulesTbl["alertCount"] or 0 -- nil or GameSec
+    if type(lastSharedNotify) ~= "number" or type(alertCount) ~= "number" then
+      debugger("getEventRulesNotifyVars 5. ERROR. Returning nil. Bad alertCount or lastSharedNotify=" .. type(lastSharedNotify) .. ", type(alertCount)=" .. type(alertCount) .. ", tableToString=" .. tableToString(typeEventRulesTbl))
+      return nil
+    end
+    return unitType, event, lastSharedNotify, sharedAlerts, priority, reAlertSec, maxAlerts, alertCount, maxQueueTime, alertSound, mark, ping
+  else
+    if type(unitObj.lastAlerts) ~= "table" then
+      unitObj.lastAlerts = {}
+    end
+    if type(unitObj.lastAlerts[unitType]) ~= "table" then
+      unitObj.lastAlerts[unitType] = {}
+    end
+    if type(unitObj.lastAlerts[unitType][event]) ~= "table" then
+      unitObj.lastAlerts[unitType][event] = {}
+    end
+    local lastNotify = unitObj.lastAlerts[unitType][event].lastNotify or (1-1)
+    local alertCount = unitObj.lastAlerts[unitType][event].alertCount or (1-1)
+    if type(lastNotify) ~= "number" or type(alertCount) ~= "number" then
+      debugger("getEventRulesNotifyVars 6. ERROR. Returning nil. Bad lastUnitNotify. lastUnitNotify=" .. type(lastNotify) .. ", tableToString=" .. tableToString(typeEventRulesTbl))
+      return nil
+    end
+    return unitType, event, lastNotify, sharedAlerts, priority, reAlertSec, maxAlerts, alertCount, maxQueueTime, alertSound, mark, ping
+  end
+end
 
+-- validEventRules = {"sharedAlerts", "priority", "reAlertSec", "maxAlerts", "maxQueueTime", "alertSound", "mark", "ping", "threshMinPerc", "threshMaxPerc"} -- if sharedAlerts it also contains: alertCount, lastNotify. ELSE these are stored in the unit with unitObj.lastAlerts[unitType][event] = {lastNotify=num,alertCount=num} 
+local function addUnitAlert(typeEventRulesTbl, unitObj) -- Use [unit or armyMgr]:getTypesRulesForEvent() with topPriorityOnly = true. Must have one of each: type,event
+  if debug then debugger("addUnitAlert 1. ") end
+  local unitType, event, lastNotify, sharedAlerts, priority, reAlertSec, maxAlerts, alertCount, maxQueueTime, alertSound, mark, ping = getEventRulesNotifyVars(typeEventRulesTbl, unitObj)
+  -- all above verified by getEventRulesNotifyVars()
+  local gameSecs = Spring.GetGameSeconds()
+  if gameSecs < lastNotify + reAlertSec or (maxAlerts ~= 0 and alertCount >= maxAlerts) then -- Before adding to queue, check unit's event last notify/maxAlerts
+    if debug then debugger("addUnitAlert 2. Too soon=" .. gameSecs .. "<" .. lastNotify + reAlertSec .. ", or reached maxAlerts=" .. maxAlerts) end
+    return false
+  end
+    
+  if not alertQueue:isEmpty() then
+    
+  end
+
+ -- Create priority queue to enable the following
+  -- If already in queue for same event
+    -- if better priority: replace
+    -- if not better priority: reject new
+  -- If already in queue for different event?
+    -- Add it
+  -- If better priority damage/thresholdHP alert, add it (if priority > 0) and remove other from queue 
+  -- If in queue and destroyed/lost, remove from queue, or it pulls new units until unit.isLost = false
 
 
 end
--- local validEvents = {"idle","damaged","destroyed","created","finished","los","enteredAir","stockpile","thresholdHP"}
--- local validEventRules = {"maxTimes", "reAlertSec", "mark", "ping", "alertSound", "threshMinPerc", "threshMaxPerc","priority"}
+-- validEvents = {"idle","damaged","destroyed","created","finished","los","enteredAir","stockpile","thresholdHP"}
+-- validEventRules = {"sharedAlerts", "priority", "reAlertSec", "maxAlerts", "maxQueueTime", "alertSound", "mark", "ping", "threshMinPerc", "threshMaxPerc"} -- if sharedAlerts it also contains: alertCount, lastNotify. ELSE these are stored in the unit with unitObj.lastAlerts[unitType][event] = {lastNotify=num,alertCount=num} 
 
--- Before adding to queue, check unit's event last notify to ensure it isn't too soon
-  -- Store/Track how?
--- If already in queue for same event with higher priority?
-  -- Remove old and add higher prioritization
--- If alreay in queue for same event
-  -- reject new
--- If already in queue for different event?
-  -- Add it, but have something in place to check before adding it
-
--- If 0 priority damage/thresholdHP alert, remove other damage from queue 
--- If in queue and destroyed/lost, remove from queue, or it pulls new units until unit.isLost = false
-
--- Rule to treat all of the same type as one unit, in terms of alerts. If any notify, keeps others from doing same for reAlertSec
-
--- In queue too long? maxQueueTime?
+-- alertQueue:getSize() -- Returns the number of elements in the queue.
+-- alertQueue:isEmpty() -- Returns true if the queue is empty, false otherwise.
+-- alertQueue:insert(value, priority) -- Inserts a new element with the given priority.
+-- alertQueue:pull() -- Retrieves and removes the element with the highest priority.
+-- alertQueue:peek() -- Returns the element with the highest priority without removing it.
+-- alertQueue:__lessThan(i, j) -- Helper functions for heap operations (min-heap)
+-- alertQueue:_swap(i, j)
+-- alertQueue:_swim(k)
+-- alertQueue:_sink(k)
 
 local function addAlert() -- placeholder for alerts that aren't unit specific
   if debug then debugger("addAlert 1. ") end
-
-
-
-
 
 
 end
@@ -1675,12 +1818,7 @@ local function isAlertQueued()
   if debug then debugger("isAlertQueued 1. ") end
 
 
-
-
-
-
 end
-
 
 
 
@@ -1732,6 +1870,12 @@ debug = false
 -- local typeRules = cUnit:getTypesRules({"commander"})
 -- debugger("validTypeEventRulesTbls=" .. tostring(validTypeEventRulesTbls(typeRules)))
 -- debugger("tableToString=" .. tableToString(typeRules))
+-- cUnit:setLost(false)
+-- debugger("unitsLost[bUnit.ID]=" .. type(cUnit.parent.unitsLost[cUnit.ID]))
+-- local priorityRules = cUnit:getTypesRulesForEvent("idle",true)
+-- local typeRules2,typeCount2,eventCount2,ruleCount2 = validTypeEventRulesTbls(priorityRules)
+-- debugger("priorityRules validTypeEventRulesTbls2=" .. tostring(typeRules2) .. ", typeCount2=" .. tostring(typeCount2) .. ", eventCount2=" .. tostring(eventCount2) .. ", ruleCount2=" .. tostring(ruleCount2) .. ", tableToString2=" .. tableToString(priorityRules))
+
 
 
 -- local searchTxt = "Commander"
@@ -1756,40 +1900,82 @@ local allyCUnit = teamsManager:createUnit(425, 49, 1) -- Ally Commander
 
 local enemyCUnit = teamsManager:createUnit(24908, 49, 2) -- Enemy Commander
 
+local eventRules = cUnit:getTypesRulesForEvent("idle",true)
+
+addUnitAlert(eventRules, cUnit)
+
 -- TestingArea
 debug = true
 -- aUnit.debug = true
 
-cUnit:setLost(false)
-debugger("unitsLost[bUnit.ID]=" .. type(cUnit.parent.unitsLost[cUnit.ID]))
+-- alertQueue:insert(bUnit, 5)
+-- alertQueue:insert(cUnit, 2)
+-- alertQueue:insert(gUnit, 1)
+-- alertQueue:insert(cUnit, 2)
+-- alertQueue:insert(gUnit, 1)
+-- alertQueue:insert(bUnit, 5)
+-- alertQueue:insert(cUnit, 2)
+
+alertQueue:insert("E1", 5)
+alertQueue:insert("B1", 2)
+alertQueue:insert("A1", 1)
+alertQueue:insert("C1", 3)
+alertQueue:insert("A2", 1)
+alertQueue:insert("E2", 5)
+alertQueue:insert("B2", 2)
+-- debugger("alertQueue.heap[1].priority=" .. tostring(alertQueue.heap[1].priority) .. ", alertQueue.heap[2].priority=" .. tostring(alertQueue.heap[2].priority) .. ", alertQueue.heap[3].priority=" .. tostring(alertQueue.heap[3].priority))
+-- local pull1a,pull1b = alertQueue:pull()
+-- local pull2a,pull2b = alertQueue:pull()
+-- local pull3a,pull3b = alertQueue:pull()
+-- debugger("alertQueue:pull()=" .. tostring(pull1b) .. ", alertQueue.heap[2].priority=" .. tostring(pull2b) .. ", alertQueue.heap[3].priority=" .. tostring(pull3b))
+
+debugger("alertQueue.heap=" .. tableToString(alertQueue.heap))
+
+
+if alertQueue:isEmpty() == false then -- How to remove a value from the priority queue
+  local size = alertQueue:getSize()
+  if size == 1 and alertQueue.heap[1] == "C1" then
+    alertQueue:pull()
+  else
+    local toRemove
+    for heapNum,valPriTbl in ipairs(alertQueue.heap) do
+      local val = valPriTbl.value
+      local priority = valPriTbl.priority
+      if val == "C1" then
+        toRemove = heapNum
+        break
+      end
+    end
+    if toRemove then
+      debugger("updating alertQueue.")
+      alertQueue.heap[toRemove] = alertQueue.heap[size]
+      alertQueue.heap[size] = nil
+      alertQueue.size = size - 1
+      alertQueue:_sink(1)
+    end
+  end
+end
+alertQueue:insert("00",0)
+
+debugger("alertQueue.heap=" .. tableToString(alertQueue.heap))
+
+local i = 1
+while alertQueue:isEmpty() == false do
+  local pulla,pullb = alertQueue:pull()
+  debugger(i .. " alertQueue:pull().value=" .. tostring(pulla) .. ", priority=" .. tostring(pullb))
+  i = i + 1
+end
 
 debug = false
-if aUnit ~= nil then
-  -- local facCount = Spring.GetFactoryCounts( aUnit.ID) -- GetFactoryCommands(unitID, 0)      -- TODO: Change to use Spring.GetFullBuildQueue(unitId) ? ######### or better GetFactoryCounts( number unitID [, number count [, bool addCMDs ]] )
-  -- local facCountI, facCountV = next(facCount)
-  -- debugger("facCount=" .. tostring(facCountI) .. "=" .. tostring(facCountV))
-  -- -- debugger("facCount=" .. type(next(facCount)))
-  -- debugger("facCount=" .. tableToString(facCount))
-
-  -- local gfc1 = Spring.GetFactoryCommands ( 5506, 0 ) -- Spring.GetFactoryCommands ( number unitID, number count = 0 )
-  -- local gfc1a, gfc1b = next(gfc1) -- is NUMBER
-  -- debugger("gfc1=" .. tostring(gfc1))
-  -- debugger("gfc1=" .. type(gfc1))
-  -- debugger("gfc1=" .. tableToString(gfc1))
-
-  -- local gfc2 = Spring.GetFactoryCommands ( 5506, -1 ) -- Spring.GetFactoryCommands ( number unitID, number count = 0 )
-  -- local gfc2a, gfc2b = next(gfc2)
-  -- debugger("gfc2=" .. tostring(gfc2a) .. "=" .. tostring(gfc2b))
-  -- -- debugger("gfc2=" .. type(next(gfc2)))
-  -- debugger("gfc2=" .. tableToString(gfc2))
-
-  -- local aTest1, aTest2 = next({a = 5})
-  -- debugger("test1 {a = 5}>" .. tostring(next({a = 5})))
-  -- debugger("test2 {a = 5}>" .. tostring(aTest1) .. "=" .. tostring(aTest2))
-  -- debugger("test3 {a = 5}>" .. tableToString({a = 5}))
-end
---???????????????????????  Time to start on the non class stuff. Get that working first. Then add functionality, like health.
-
+-- alertQueue:getSize() -- Returns the number of elements in the queue.
+-- alertQueue:isEmpty() -- Returns true if the queue is empty, false otherwise.
+-- alertQueue:insert(value, priority) -- Inserts a new element with the given priority.
+-- alertQueue:pull() -- Retrieves and removes the element with the highest priority.
+-- alertQueue:peek() -- Returns the element with the highest priority without removing it.
+-- alertQueue:__lessThan(i, j) -- Helper functions for heap operations (min-heap)
+-- alertQueue:_swap(i, j)
+-- alertQueue:_swim(k)
+-- alertQueue:_sink(k)
 
 -- for k, v in pairs(teamsManager.armies) do
 --   debugger("Testing all teams. teamID=" .. tostring(v.teamID) .. ", allianceID=" .. tostring(v.allianceID) .. ", playerID0Name=" .. tostring(v.playerIDsNames[0]) .. ", playerID1Name=" .. tostring(v.playerIDsNames[1]))
