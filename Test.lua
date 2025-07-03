@@ -1840,7 +1840,7 @@ local function getEventRulesNotifyVars(unitObj,typeEventRulesTbl ) -- validates 
   if type(maxAlerts) ~= "number" or type(reAlertSec) ~= "number" or type(priority) ~= "number" or ((type(maxQueueTime) ~= "number" and type(maxQueueTime) ~= "boolean") or (type(maxQueueTime) == "boolean" and maxQueueTime ~= false)) or (type(mark) ~= "string" and type(mark) ~= "boolean") or (type(ping) ~= "string" and type(ping) ~= "boolean") or (type(alertSound) ~= "string" and type(alertSound) ~= "boolean") or (type(alertSound) == "boolean" and alertSound ~= false) or type(sharedAlerts) ~= "boolean" or (type(threshMinPerc) ~= "number" or (threshMinPerc < 0 or threshMinPerc >= 1)) or (type(threshMaxPerc) ~= "number" or (threshMaxPerc > 1 or threshMaxPerc <= threshMinPerc)) then
     debugger("getEventRulesNotifyVars 4. ERROR. Returning nil. Bad threshMinPerc, threshMaxPerc, sharedAlerts, mark, ping, alertSound, maxAlerts, reAlertSec or priority=" .. tostring(priority) .. ", reAlertSec=" .. tostring(reAlertSec) .. ", maxAlerts=" .. tostring(maxAlerts) .. ", maxQueueTime=" .. tostring(maxQueueTime) .. ", threshMinPerc=" .. tostring(threshMinPerc) .. ", threshMaxPerc=" .. tostring(threshMaxPerc) .. ", tableToString=" .. tableToString(typeEventRulesTbl))
     return nil
-  end
+  end 
   local alertBaseObj = unitObj
   if sharedAlerts then
     alertBaseObj = unitObj.parent
