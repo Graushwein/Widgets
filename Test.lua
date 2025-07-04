@@ -43,7 +43,7 @@ local trackAllAlliedUnitsRules = {} --
 
 -- Newly added event types will need to be added here
 local validEvents = {"created","finished","idle","damaged","taken","destroyed","los","enteredAir","stockpile","thresholdHP"}
-local validEventRules = {"sharedAlerts", "priority", "reAlertSec", "maxAlerts", "maxQueueTime", "alertSound", "mark", "ping", "threshMinPerc", "threshMaxPerc"}
+local validEventRules = {"sharedAlerts", "priority", "reAlertSec", "maxAlerts", "maxQueueTime", "alertSound", "mark", "ping", "threshMinPerc", "threshMaxPerc","messageTo","messageTxt"}
 -- most validEventRules are used in getEventRulesNotifyVars(typeEventRulesTbl, unitObj)
 -- mark = only you see. ping = ALL ALLIES see it. Be careful with ping
 -- Priority from 0-99999, decimals okay, default 5. 0 ignores minSecsBetweenNotifications and will notify immediately
@@ -63,7 +63,7 @@ local validEventRules = {"sharedAlerts", "priority", "reAlertSec", "maxAlerts", 
   -- Add it to validEvents above, like "exampleEvent". Case-sensitive everywhere
   -- Update the validation rules in getEventRulesNotifyVars() following the examples, add "exampleEvent" in BOTH return lines
   -- Update one of the "widget:[name]" functions, like "widget:UnitIdle()", to run unitObj:getTypesRulesForEvent() for matches
-  -- if matches, define what it should do next, like addUnitAlert()
+  -- if matches, define what it should do next, like addUnitToAlertQueue()
 
 -- multiple event rules allowed, but must be unique. Example: myCommanderRules can'the have 2 "idle", but can have all events: idle, damaged, and finished...
 -- units can have multiple types, like making the commander also have the constructor type. makeRelTeamDefsRules() is used to do that.
@@ -71,7 +71,7 @@ local validEventRules = {"sharedAlerts", "priority", "reAlertSec", "maxAlerts", 
 local myCommanderRules = {idle = {priority=2, maxAlerts=0, reAlertSec=15, mark=nil, alertSound="sounds/commands/cmd-selfd.wav"}, damaged = {maxAlerts=0, reAlertSec=30, mark=nil, alertSound="sounds/commands/cmd-selfd.wav"}, thresholdHP = {maxAlerts=0, reAlertSec=60, mark=nil, alertSound="sounds/commands/cmd-selfd.wav", threshMinPerc=.5, priority=0} } -- idle = {maxAlerts=0, reAlertSec=15, mark=nil, alertSound="sounds/commands/cmd-selfd.wav"},  will sound alert when Commander idle/15 secs, (re)damaged once per 30 seconds (unlimited), and when damage causes HP to be under 50%
 local myConstructorRules = {idle = {sharedAlerts=true, maxAlerts=0, reAlertSec=15, mark=nil, alertSound="sounds/commands/cmd-selfd.wav"}, destroyed = {maxAlerts=0, reAlertSec=1, mark="Con Lost", alertSound=nil}}
 local myFactoryRules = {idle = {maxAlerts=0, reAlertSec=15, mark=nil, alertSound="sounds/commands/cmd-selfd.wav"}}
-local myRezBotRules = {idle = {maxAlerts=0, reAlertSec=15, mark=nil, alertSound="sounds/commands/cmd-selfd.wav"}, destroyed = {sharedAlerts=true, maxAlerts=0, reAlertSec=100, mark="Rezbot Lost", alertSound=nil}}
+local myRezBotRules = {idle = {maxAlerts=0, reAlertSec=15, mark=nil, messageTo="me",messageTxt="messageTxt"}, destroyed = {sharedAlerts=true, maxAlerts=0, reAlertSec=100, mark="Rezbot Lost", alertSound=nil}}
 local myMexRules = {destroyed = {maxAlerts=0, reAlertSec=1, mark="Mex Lost", alertSound=nil}, taken = {maxAlerts=0, reAlertSec=1, mark="Mex Taken", alertSound=nil}}
 local myEnergyGenRules = {finished = {maxAlerts=0, reAlertSec=1, mark=nil, alertSound=nil}, destroyed = {maxAlerts=0, reAlertSec=1, mark=nil, alertSound=nil}} -- reAlertSec only used if mark/sound wanted. Saved so custom code can do something with the information.
 local myRadarRules = {finished = {maxAlerts=0, reAlertSec=1, mark="Radar Built", alertSound="sounds/commands/cmd-selfd.wav"}, destroyed = {maxAlerts=0, reAlertSec=1, mark="Radar Lost", alertSound="sounds/commands/cmd-selfd.wav"}}
@@ -89,7 +89,7 @@ local trackMyTypesRules = {
 local allyCommanderRules = {} -- Won't track unless rules added to it
 local allyConstructorRules = {}
 local allyFactoryRules = {}
-local allyFactoryT2Rules = {finished = {maxAlerts=1, reAlertSec=15, mark="T2 Ally", alertSound=nil}} -- So you know to badger them for a T2 constructor ;)
+local allyFactoryT2Rules = {finished = {maxAlerts=1, reAlertSec=15, mark="T2 Ally", alertSound=nil, messageTo="allies",messageTxt="T2 Con Plz!"}} -- So you know to badger them for a T2 constructor ;)
 local allyRezBotRules = {}
 local allyMexRules = {destroyed = {maxAlerts=0, reAlertSec=1, mark="Ally Mex Lost", alertSound=nil}}
 local allyEnergyGenRules = {}
@@ -105,7 +105,7 @@ local trackAllyTypesRules = {
 	energyGen = allyEnergyGenRules,
 	radar = allyRadarRules
 }
-local enemyCommanderRules = {los = {maxAlerts=0, reAlertSec=30, mark="Commander", alertSound=nil, priority=0} } -- will mark "Commander" at location when (re)enters LoS, once per 30 seconds (unlimited)
+local enemyCommanderRules = {los = {maxAlerts=0, reAlertSec=30, ping="Commander", alertSound=nil, priority=0, messageTo="all",messageTxt="Get em!"} } -- will mark "Commander" at location when (re)enters LoS, once per 30 seconds (unlimited)
 local enemyConstructorRules = {}
 local enemyFactoryRules = {}
 local enemyFactoryT2Rules = {los = {maxAlerts=1, reAlertSec=15, mark="T2 enemy", alertSound=nil}} -- Hope you're ready!
@@ -137,6 +137,7 @@ local trackEnemyTypesRules = {
 	nukeDefense = enemyNukeDefenseRules
 }
 local trackSpectatorTypesRules = {}
+-- , messageTo="spectators",messageTxt="messageTxt"
 -- UnitEnteredAir() --> "unitID, unitDefID, teamID" for commanders
 -- UnitCreated() --> "unitID, unitDefID, teamID, builderID" for tracking T2/T3, (anti)nukes, LOLCannon ...
 -- StockpileChanged() --> "unitID, unitDefID, unitTeam, weaponNum, oldCount, newCount" for nuke
@@ -188,6 +189,7 @@ table.insert(validEventRules,"lastNotify") -- add system only rules
 table.insert(validEventRules,"alertCount") -- add system only rules
 
 local myTeamID = Spring.GetMyTeamID()
+local myPlayerID = Spring.GetMyPlayerID()
 local isSpectator
 local warnFrame = 0
 
@@ -253,6 +255,91 @@ local function concatenateKeyValuePairs(table, keySep, sep)
   return result
 end
 
+--====================================================
+
+local Node = {}
+Node.__index = Node
+
+function Node:new(value, alertRulesTbl, priority)
+  return setmetatable({value = value, alertRulesTbl = alertRulesTbl, priority = priority, queuedTime = Spring.GetGameSeconds()}, self)
+end
+
+local minPriorityQueue = {}
+minPriorityQueue.__index = minPriorityQueue
+
+function minPriorityQueue:new()
+  return setmetatable({}, self)
+end
+local function binarySearchInsertIndex(table, priority) -- Binary search function to find the insertion point for a minimum priority queue
+  local low, high = 1, #table
+  local index = #table + 1 -- Default insertion at the end
+  while low <= high do
+    local mid = math.floor((low + high) / 2) -- Compare for minimum priority queue (ascending order)
+    if priority < table[mid].priority then
+      index = mid
+      high = mid - 1
+    else
+      low = mid + 1
+    end
+  end
+  return index
+end
+
+function minPriorityQueue:insert(value, alertRulesTbl, priority)
+  if value == nil or type(priority) ~= "number" or priority < 0 or priority > 99999 then
+    debugger("priorityQueue:insert 1. ERROR. Invalid value or priority="..tostring(priority))
+    return nil
+  end
+  local newNode = Node:new(value, alertRulesTbl, priority)
+  local insertIndex = binarySearchInsertIndex(self, priority)
+  table.insert(self, insertIndex, newNode)
+end
+
+function minPriorityQueue:pull(arrNum)
+  if self:size() == 0 or type(arrNum) ~= "number" or arrNum < 1 or arrNum > self.size then
+    debugger("priorityQueue:pull(). ERROR. Invalid arrNum=" .. tostring(arrNum))
+    return nil
+  end
+  arrNum = arrNum or 1
+  if self:size() == 0 then return nil, 0 end
+  local elRemoved = table.remove(self, arrNum) -- Removes/Returns the requested element
+  return elRemoved.value, elRemoved.alertRulesTbl, elRemoved.priority, elRemoved.queuedTime
+end
+
+function minPriorityQueue:peek(arrNum) -- Returns/Keeps the top/requested element, returning vars: value, alertRulesTbl, priority, queuedTime
+  arrNum = arrNum or 1
+  if self:isEmpty() or type(arrNum) ~= "number" or arrNum < 1 or arrNum > self.size then
+    debugger("minPriorityQueue:peek(). ERROR. Invalid arrNum=" .. tostring(arrNum))
+    return nil
+  end
+  return self[arrNum].value, self[arrNum].alertRulesTbl, self[arrNum].priority, self[arrNum].queuedTime
+end
+function minPriorityQueue:getSize() -- Returns the number of elements in the queue.
+  return self:size()
+end
+function minPriorityQueue:isEmpty() -- Returns true if the queue is empty, false otherwise.
+  return self:size() == 0
+end
+function minPriorityQueue:size()
+  return #self
+end
+local alertQueue2 = minPriorityQueue:new()
+-- Example usage:
+-- min_pq:insert("Task A", 5)
+-- min_pq:insert("Task B", 2)
+-- min_pq:insert("Task C", 8)
+
+-- local task, priority = min_pq:pull()
+-- print("Pulled:", task, "with priority:", priority) -- Expect "Task B" (lowest priority)
+
+-- task, priority = min_pq:pull()
+-- print("Pulled:", task, "with priority:", priority) -- Expect "Task A"
+
+-- task, priority = min_pq:pull()
+-- print("Pulled:", task, "with priority:", priority) -- Expect "Task C"
+
+--====================================================
+
 local priorityQueue = {}
 priorityQueue.__index = priorityQueue
 function priorityQueue:new()
@@ -262,8 +349,12 @@ function priorityQueue:new()
   }
   return setmetatable(queue, self)
 end
--- validEventRules = {"sharedAlerts", "priority", "reAlertSec", "maxAlerts", "maxQueueTime", "alertSound", "mark", "ping", "threshMinPerc", "threshMaxPerc"} -- if sharedAlerts it also contains: alertCount, lastNotify. ELSE these are stored in the unit with unitObj.lastAlerts[unitType][event] = {lastNotify=num,alertCount=num} 
+-- validEventRules = {"sharedAlerts", "priority", "reAlertSec", "maxAlerts", "maxQueueTime", "alertSound", "mark", "ping", "threshMinPerc", "threshMaxPerc","messageTo","messageTxt"} -- if sharedAlerts it also contains: alertCount, lastNotify. ELSE these are stored in the unit with unitObj.lastAlerts[unitType][event] = {lastNotify=num,alertCount=num} 
 function priorityQueue:insert(value, alertRulesTbl, priority) -- alertRulesTbl should have all (key,pair) vars that can be used to determine whether and how to alert key,pair: {teamID, unitType, event, lastNotify, sharedAlerts, priority, reAlertSec, maxAlerts, alertCount, maxQueueTime, alertSound, mark, ping, threshMinPerc, threshMaxPerc}
+  if value == nil or type(priority) ~= "number" or priority < 0 or priority > 99999 then
+    debugger("priorityQueue:insert 1. ERROR. Invalid value or priority="..tostring(priority))
+    return nil
+  end
   self.size = self.size + 1
   self.heap[self.size] = {value = value, alertRulesTbl = alertRulesTbl, priority = priority, queuedTime = Spring.GetGameSeconds()}
   self:_swim(self.size)
@@ -287,9 +378,9 @@ function priorityQueue:pull() -- Returns/Removes the highest priority with vars:
 end
 
 function priorityQueue:peek(heapNum) -- Returns/Keeps the top/requested element, returning vars: value, alertRulesTbl, priority, queuedTime
-  if self:isEmpty() or (type(heapNum) ~= "nil" and type(heapNum) ~= "number") or (type(heapNum) == "number" and (heapNum < 1 or heapNum > self.size)) then
+  if self:isEmpty() or type(heapNum) ~= "number" or heapNum < 1 or heapNum > self.size then
     debugger("priorityQueue:peek(). ERROR. Invalid heapNum=" .. tostring(heapNum))
-    return nil, nil
+    return nil, nil, nil, nil
   end
   heapNum = heapNum or 1
   return self.heap[heapNum].value, self.heap[heapNum].alertRulesTbl, self.heap[heapNum].priority, self.heap[heapNum].queuedTime
@@ -398,6 +489,7 @@ pUnit.defID = nil -- unitDefID
 pUnit.isIdle = false -- Use the get/set-methods instead.
 pUnit.lastSetIdle = nil -- uses GetGameFrame()
 pUnit.created = nil -- gameSecs
+pUnit.coords = nil
 pUnit.lost = nil -- gameSecs
 pUnit.isLost = false
 pUnit.lastUpdate = nil -- Game seconds last update time of the unit (NOT used YET)
@@ -722,127 +814,105 @@ function teamsManager:validIDs(vUnit, unitID, vdef, defID, vtm, teamID, vAlli, a
   return allValid
 end
 
-function teamsManager:getNextAvailableAlert()
-  if debug then debugger("getNextAvailableAlert 1. ") end
-
- -- use :getTypesRulesForEvent([event]) to get all for event
- -- get rid of ones in queue, on cooldown, and at maxAlerts
+local function alertPointer(x, y, z, pointerText, localOnly)
+  if debug then debugger("alert 1. coords="..tostring(x)..", "..tostring(y)..", "..tostring(z)..", pointerText="..tostring(pointerText)..", localOnly="..tostring(localOnly)) end
+  local screenSizeX, screenSizeY = Spring.GetScreenGeometry()
+  if type(x) ~= "number" or type(y) ~= "number" or type(z) ~= "number" or x < 0 or screenSizeX < x or y < 0 or screenSizeY < y then
+    debugger("alert 2. ERROR. Invalid coordinates=" .. tostring(x) .. ", " .. tostring(y))
+    return false
+  end
+  pointerText = type(pointerText) == "string" and pointerText or ""
+  localOnly = type(localOnly) == "boolean" and localOnly or true
+  Spring.MarkerAddPoint( x, y, z, pointerText, localOnly) -- localOnly = mark
+  return true
 end
 
--- x,y,z only used when unitObj=nil
-function teamsManager:alert(unitObj, alertVarsTbl,x,y,z) -- nil input alerts from alertQueue. alertVarsTbl created by getEventRulesNotifyVars(unitObj,typeEventRulesTbl)
-  if debug then debugger("alert 1. alertVars=" .. type(alertVarsTbl)) end
-  -- {teamID, unitType, event, lastNotify, sharedAlerts, priority, reAlertSec, maxAlerts, alertCount, maxQueueTime, alertSound, mark, ping, threshMinPerc, threshMaxPerc}
-  -- if true then
-  --   return true
-  -- end
+local function alertSound(soundPath, volume)
+  volume = volume or 1
+  if debug then debugger("alert 1. soundPath=" .. tostring(soundPath)..", volume="..tostring(volume)) end
+  if type(soundPath) ~= "string" or volume ~= nil and (type(volume) ~= "number" or volume < 0 or volume > 1) then
+    debugger("alert 2. ERROR. Invalid volume or soundPath=" .. tostring(soundPath)..", volume="..tostring(volume))
+    return nil
+  end
+    Spring.PlaySoundFile(soundPath, 1.0, 'ui')
+  return true
+end
+
+local function alertMessage(message, toWhom)
+  if debug then debugger("alert 1. alertMessage=" .. tostring(message)..", toWhom="..tostring(toWhom)) end
+  toWhom = toWhom or "me"
+  if type(message) ~= "string" or message == "" or (type(toWhom) ~= "string" and toWhom ~= nil) or (toWhom ~= "me" and toWhom ~= "all" and toWhom ~= "allies" and toWhom ~= "spectators") then
+    debugger("alertMessage 2. ERROR. Invalid toWhom or message=" .. tostring(message)..", toWhom="..tostring(toWhom))
+    return nil
+  end
+  if toWhom == "me" then
+    Spring.SendMessageToPlayer(myPlayerID, message) -- "me" myPlayerID
+  elseif toWhom == "all" then
+    Spring.SendMessage(message) -- "all"
+  elseif toWhom == "allies" then
+    Spring.SendMessageToAllyTeam(teamsManager.myArmyManager.allianceID, message) -- "allies" teamsManager.myArmyManager.allianceID
+  elseif toWhom == "spectators" then
+    Spring.SendMessageToSpectators(message) -- "spectators"
+  end
+  return true
+end
 
 
-  -- if type(alertVarsTbl["maxQueueTime"]) == "number" then
-    
-  -- end
-  
+function teamsManager:alert(unitObj, alertVarsTbl) -- nil input alerts from alertQueue. alertVarsTbl created by getEventRulesNotifyVars(unitObj,typeEventRulesTbl)
+  if debug or self.debug then debugger("alert 1. unitObj.ID="..tostring(unitObj.ID)..", alertVarsTbl=" .. type(alertVarsTbl)) end
+  if type(alertVarsTbl) ~= "table" then
+    debugger("alert 2. ERROR. Not nil or bad parameters. unitObj.ID="..tostring(unitObj.ID)..", alertVarsTbl=" .. type(alertVarsTbl))
+    return nil
+  end
+
+
+self:getNextQueuedAlert()
+
+
+
+
+
   if type(alertVarsTbl["alertSound"]) == "string" then -- play audio
-    Spring.PlaySoundFile(alertVarsTbl["alertSound"], 1.0, 'ui')
+    alertSound(alertVarsTbl["alertSound"])
+  end
+  if type(alertVarsTbl["messageTxt"]) == "string" and type(alertVarsTbl["messageTo"]) == "string" then
+    alertMessage(alertVarsTbl["messageTxt"], alertVarsTbl["messageTo"])
+  end
+  if type(unitObj) == "table" and type(unitObj.ID) == "number" and type(alertVarsTbl) == "table" then
     
-  end
-
-  if (alertVarsTbl["mark"] == true or type(alertVarsTbl["mark"]) == "string") or (alertVarsTbl["ping"] == true or type(alertVarsTbl["ping"]) == "string") then -- not supposed to have both, but will be cautious and make localOnly the preference
-    local localOnly = false
-    local pointerText = alertVarsTbl["ping"] -- else will ping to other players with false
-    if alertVarsTbl["mark"] == true or type(alertVarsTbl["mark"]) == "string" then
-      localOnly = true
-      pointerText = alertVarsTbl["mark"]
+    if (alertVarsTbl["mark"] == true or type(alertVarsTbl["mark"]) == "string") or (alertVarsTbl["ping"] == true or type(alertVarsTbl["ping"]) == "string") then -- not supposed to have both, but will be cautious and make localOnly the preference
+      local localOnly = false
+      local pointerText = alertVarsTbl["ping"] -- else will ping to other players with false
+      if not pointerText or alertVarsTbl["mark"] == true or type(alertVarsTbl["mark"]) == "string" then
+        localOnly = true
+        pointerText = alertVarsTbl["mark"]
+      end
+      if pointerText == true then
+        pointerText = ""
+      end
+      local x, y, z = unitObj:getUnitPosition()
+      local screenSizeX, screenSizeY = Spring.GetScreenGeometry()
+      if type(x) ~= "number" or type(y) ~= "number" or type(z) ~= "number" or x < 0 or screenSizeX < x or y < 0 or screenSizeY < y then
+        debugger("alert 2. ERROR. Invalid coordinates=" .. tostring(x) .. ", " .. tostring(y) .. ", " .. tostring(z))
+        return nil
+      end
+      alertPointer(x, y, z, pointerText, localOnly)
     end
-    if type(pointerText) == "boolean" then
-      pointerText = ""
-    end
-    if type(unitObj) == "table" then
-      x=unitObj.coords["x"]
-      y=unitObj.coords["y"]
-      z=unitObj.coords["z"]
-    elseif type(x) == "number" and type(y) == "number" and type(z) == "number" then
-      -- already loaded vars
-    else
-      debugger("alert 2. ERROR. Invalid unitObj and coordinates=" .. type(unitObj) .. ", alertRulesTbl=" .. type(alertRulesTbl) .. ", priority=" .. tostring(priority) .. ", gameSec=" .. tostring(gameSec) .. ", unitName=" .. tostring(UnitDefs[unitObj.defID].translatedHumanName))
-    end
-
-    Spring.MarkerAddPoint( x, y, z , pointerText, localOnly) -- localOnly = mark
-
-    
-  -- debugger("setLost x="..self.coords["x"]..", y="..self.coords["y"]..", z="..self.coords["z"])
-  -- local text = "A "..UnitDefs[self.defID].translatedHumanName.." died!"
-  -- Spring.MarkerAddPoint(x, y, z , text, true)
-  -- Spring.SendMessageToPlayer ( myTeamID, text ) -- return: nil
-  end
-  local alertBaseObj = unitObj
-  if alertVarsTbl["sharedAlerts"] then
-    alertBaseObj = unitObj.parent
-  end
-  alertBaseObj = alertBaseObj["lastAlerts"][alertVarsTbl["unitType"]][alertVarsTbl["event"]]
-  debugger("1 alertBaseObj.ID="..tostring(alertBaseObj.ID)..", alertBaseObj[alertCount]="..tostring(alertBaseObj["alertCount"])..", lastNotify="..tostring(alertBaseObj["lastNotify"]))
-  local gameSec = Spring.GetGameSeconds()
-  alertBaseObj["lastNotify"] = gameSec
-  alertBaseObj["alertCount"] = (alertBaseObj["alertCount"] + 1)
-  alertBaseObj["isQueued"] = false -- {defID = {type = {event = {rules}}}}
-  debugger("2 gameSec="..tostring(gameSec)..", alertBaseObj.alertCount="..tostring(alertBaseObj["alertCount"])..", lastNotify="..tostring(alertBaseObj["lastNotify"]))
-
-  if true then
+  
     return true
   end
 
-
-
-  local alerted = false
-  while alerted == false and alertQueue:getSize() > 0 do
-    local unitObj,alertRulesTbl, priority, gameSec = alertQueue:pull()
-    if debug then debugger("alert 2. Pulled value=" .. type(unitObj) .. ", alertRulesTbl=" .. type(alertRulesTbl) .. ", priority=" .. tostring(priority) .. ", gameSec=" .. tostring(gameSec) .. ", unitName=" .. tostring(UnitDefs[unitObj.defID].translatedHumanName)) end
-    
-  -- local maxAlerts = rulesTbl["maxAlerts"] or 0
-  -- local reAlertSec = rulesTbl["reAlertSec"] or 10
-  -- local priority = rulesTbl["priority"] or 5
-  -- local maxQueueTime = rulesTbl["maxQueueTime"] or false -- false or number
-  -- local mark = rulesTbl["mark"] or false -- t/f or string
-  -- local ping = rulesTbl["ping"] or false -- t/f or string
-  -- local alertSound = rulesTbl["alertSound"] or false -- false or string
-  -- local sharedAlerts = rulesTbl["sharedAlerts"] or false -- nil or true
-  -- local threshMinPerc = rulesTbl["threshMinPerc"] or 0 -- number 0-.999
-  -- local threshMaxPerc = rulesTbl["threshMaxPerc"] or 1 -- number 0.001-1
-
-    -- MAYBE MOVE THIS STUFF TO SOMETHING LIKE getNextAvailableAlert()
-    -- if lost
-    -- if alert no longer valid, like idle or thresholdHP
-
-    if unitObj == nil then -- nonUnit alert. For stuff like timers, reminders, and such.
-      
-    end
-    -- Spring.PlaySoundFile ( string soundfile [, number volume = 1.0 [, number posx [, number posy [, number posz [, number speedx[, number speedy[, number speedz[, number | string channel ]]]]]]]] )
-    -- Spring.MarkerAddPoint ( number x, number y, number z [, string text = "" [, bool localOnly ]] ) -- localOnly = mark
-    
-    -- after alert done, update the following 
-    if alerted then
-      local alertBaseObj = unitObj
-      if alertRulesTbl["sharedAlerts"] == true then
-        alertBaseObj = unitObj.parent
-      end
-      alertBaseObj = alertBaseObj["lastAlerts"][alertRulesTbl["unitType"]][alertRulesTbl["event"]]
-      alertBaseObj["lastNotify"] = Spring.GetGameSeconds
-      alertBaseObj["alertCount"] = alertBaseObj["alertCount"] + 1
-      alertBaseObj["isQueued"] = false -- {defID = {type = {event = {rules}}}}
-    end
-  end
-    -- {teamID, unitType, event, lastNotify, sharedAlerts, priority, reAlertSec, maxAlerts, alertCount, maxQueueTime, alertSound, mark, ping, threshMinPerc, threshMaxPerc}
-    -- {heapNum = {value = unitObj, alertRulesTbl = {[rule] = [value]}, priority = priority, queuedTime = Spring.GetGameSeconds()}} 
-    -- {value = value, alertRulesTbl = alertRulesTbl, priority = priority, queuedTime = Spring.GetGameSeconds()}
 end
 
-
--- validEventRules = {"sharedAlerts", "priority", "reAlertSec", "maxAlerts", "maxQueueTime", "alertSound", "mark", "ping", "threshMinPerc", "threshMaxPerc"} -- if sharedAlerts it also contains: alertCount, lastNotify. ELSE these are stored in the unit with unitObj.lastAlerts[unitType][event] = {lastNotify=num,alertCount=num} 
-function teamsManager:addUnitAlert(unitObj, typeEventRulesTbl) -- Use [unit or armyMgr]:getTypesRulesForEvent() with topPriorityOnly = true. Must have one of each: type,event
-  if debug then debugger("addUnitAlert 1. ") end
-  local alertVarsTbl = self:getEventRulesNotifyVars(unitObj,typeEventRulesTbl )
+function teamsManager:addUnitToAlertQueue(unitObj, typeEventRulesTbl) -- Use [unit or armyMgr]:getTypesRulesForEvent() with topPriorityOnly = true. Must have one of each: type,event
+  if debug or self.debug then debugger("addUnitToAlertQueue 1. ") end
+  if type(unitObj) ~= "table" or type(unitObj.ID) ~= "number" or type(typeEventRulesTbl) ~= "table" then
+    debugger("addUnitToAlertQueue 2. ERROR. Returning nil. Bad unit or rules table. unitObj.ID="..tostring(unitObj.ID)..", alertVarsTbl=" .. type(typeEventRulesTbl))
+    return nil
+  end
+  local alertVarsTbl = self:getEventRulesNotifyVars(unitObj, typeEventRulesTbl)
   if type(alertVarsTbl) ~= "table" then -- all is verified by getEventRulesNotifyVars()
-    debugger("addUnitAlert 2. ERROR. Returning nil. getEventRulesNotifyVars() returned nil. alertVarsTbl=" .. type(alertVarsTbl))
+    debugger("addUnitToAlertQueue 3. ERROR. Returning nil. getEventRulesNotifyVars() returned nil. alertVarsTbl=" .. type(alertVarsTbl))
     return nil
   end
   local alertBaseObj = unitObj
@@ -851,44 +921,29 @@ function teamsManager:addUnitAlert(unitObj, typeEventRulesTbl) -- Use [unit or a
   end
   alertBaseObj = alertBaseObj["lastAlerts"][alertVarsTbl["unitType"]][alertVarsTbl["event"]]
   local gameSecs = Spring.GetGameSeconds()
-
-  if not ((alertVarsTbl["mark"] ~= true and type(alertVarsTbl["mark"]) ~= "string") and (alertVarsTbl["ping"] ~= true and type(alertVarsTbl["ping"]) ~= "string") and type(alertVarsTbl["alertSound"]) ~= "string") then
-    debugger("mark/ping/sound PASS")
-  end
-  if gameSecs < alertBaseObj["lastNotify"] + alertVarsTbl["reAlertSec"] then
-    debugger("Too soon PASS")
-  end
-  if (alertVarsTbl["maxAlerts"] ~= 0 and alertBaseObj["alertCount"] >= alertVarsTbl["maxAlerts"]) then
-    debugger("Met maxAlerts PASS.")
-  end
-
-
   if ((type(alertVarsTbl["mark"]) ~= "string") and (type(alertVarsTbl["ping"]) ~= "string") and type(alertVarsTbl["alertSound"]) ~= "string") or alertBaseObj["isQueued"] or gameSecs < alertBaseObj["lastNotify"] + alertVarsTbl["reAlertSec"] or (alertVarsTbl["maxAlerts"] ~= 0 and alertBaseObj["alertCount"] >= alertVarsTbl["maxAlerts"]) then
-    if debug then debugger("addUnitAlert 3. Too soon or no alert rules. isQueued="..tostring(alertBaseObj["isQueued"])..", timing=" .. tostring(gameSecs) .. "<" .. tostring(alertBaseObj["lastNotify"] + alertVarsTbl["reAlertSec"]) .. ", or reached maxAlerts=" .. tostring(alertBaseObj["alertCount"]) .. "/" .. tostring(alertVarsTbl["maxAlerts"])..", mark="..tostring(alertVarsTbl["mark"])..", ping="..tostring(alertVarsTbl["ping"])..", alertSound="..tostring(alertVarsTbl["alertSound"]) .. ", tableToString=" .. tableToString(alertVarsTbl)) end
+    if debug then debugger("addUnitToAlertQueue 3. Too soon or no alert rules. isQueued="..tostring(alertBaseObj["isQueued"])..", timing=" .. tostring(gameSecs) .. "<" .. tostring(alertBaseObj["lastNotify"] + alertVarsTbl["reAlertSec"]) .. ", or reached maxAlerts=" .. tostring(alertBaseObj["alertCount"]) .. "/" .. tostring(alertVarsTbl["maxAlerts"])..", mark="..tostring(alertVarsTbl["mark"])..", ping="..tostring(alertVarsTbl["ping"])..", alertSound="..tostring(alertVarsTbl["alertSound"]) .. ", tableToString=" .. tableToString(alertVarsTbl)) end
     return false
   end
-
-  -- debugger("addUnitAlert 3. Too soon or no alert rules. isQueued="..tostring(alertBaseObj["isQueued"])..", timing=" .. tostring(gameSecs) .. "<" .. tostring(alertBaseObj["lastNotify"] + alertVarsTbl["reAlertSec"]) .. ", or reached maxAlerts=" .. tostring(alertBaseObj["alertCount"]) .. "/" .. tostring(alertVarsTbl["maxAlerts"])..", mark="..tostring(alertVarsTbl["mark"])..", ping="..tostring(alertVarsTbl["ping"])..", alertSound="..tostring(alertVarsTbl["alertSound"]) .. ", tableToString=" .. tableToString(alertVarsTbl))
-  self:alert(unitObj, alertVarsTbl,x,y,z)
 
 
 
   if alertVarsTbl["priority"] == 0 then
-    if debug then debugger("addUnitAlert 4. SUCCESS. Priority 0 goes straight to alert(). priority=" .. tostring(alertVarsTbl["priority"])) end
-    self:alert(alertVarsTbl)
+    if debug then debugger("addUnitToAlertQueue 4. SUCCESS. Priority 0 goes straight to alert(). priority=" .. tostring(alertVarsTbl["priority"])) end
+    self:alert(unitObj, alertVarsTbl)
     return true
   end
   if not alertQueue:isEmpty() then -- ensure not adding duplicates and manage situations where an alert should be removed and/or replaced
     -- If already in queue for same event, vars used: teamID, unitType, event, sharedAlerts, priority, maxQueueTime, threshMinPerc, threshMaxPerc
-    if debug then debugger("addUnitAlert 5. sharedAlerts=" .. tostring(alertVarsTbl["sharedAlerts"]) .. ". Starting checks to decide if this alert should be queued and/or others removed/replaced. alertVarsTbl.sharedAlerts=" .. tostring(alertVarsTbl["sharedAlerts"])) end
+    if debug then debugger("addUnitToAlertQueue 5. sharedAlerts=" .. tostring(alertVarsTbl["sharedAlerts"]) .. ". Starting checks to decide if this alert should be queued and/or others removed/replaced. alertVarsTbl.sharedAlerts=" .. tostring(alertVarsTbl["sharedAlerts"])) end
     local alertMatchesTbls
     if alertVarsTbl["sharedAlerts"] then
       alertMatchesTbls = self:getQueuedEvents(nil,alertVarsTbl.teamID,alertVarsTbl["unitType"],alertVarsTbl["event"],nil,nil)
       if alertMatchesTbls then -- if shared, and same type/event, then don't add the new one
-        debugger("addUnitAlert 6. ERROR. Rejected because same shared type/event was present. Returning nil. alertVarsTbl=" .. tableToString(alertVarsTbl))
+        debugger("addUnitToAlertQueue 6. ERROR. Rejected because same shared type/event was present. Returning nil. alertVarsTbl=" .. tableToString(alertVarsTbl))
         return nil
       end
-      if debug then debugger("addUnitAlert 7. SUCCESS. Added sharedAlert to queue.") end
+      if debug then debugger("addUnitToAlertQueue 7. SUCCESS. Added sharedAlert to queue.") end
       alertQueue:insert(unitObj, alertVarsTbl, alertVarsTbl["priority"])
       return true
     else
@@ -900,7 +955,7 @@ function teamsManager:addUnitAlert(unitObj, typeEventRulesTbl) -- Use [unit or a
       local removeHeapNums ={}
       for heapNum,value in ipairs(alertMatchesTbls) do -- {heapNum = {value = unitObj, alertRulesTbl = {[rule] = [value]}, priority = priority, queuedTime = Spring.GetGameSeconds()}}
         if bestPriority < value["priority"] then -- Remove duplicate with worse priority
-          if debug then debugger("addUnitAlert 8. Will need to remove heap="..tostring(heapNum)) end -- {value = value, alertRulesTbl = alertRulesTbl, priority = priority, queuedTime = Spring.GetGameSeconds()}
+          if debug then debugger("addUnitToAlertQueue 8. Will need to remove heap="..tostring(heapNum)) end -- {value = value, alertRulesTbl = alertRulesTbl, priority = priority, queuedTime = Spring.GetGameSeconds()}
           table.insert(removeHeapNums,heapNum)
         else
           bestPriority = value["priority"]
@@ -909,7 +964,7 @@ function teamsManager:addUnitAlert(unitObj, typeEventRulesTbl) -- Use [unit or a
       end
       if #removeHeapNums > 0 then
         if #removeHeapNums > 1 then
-          debugger("addUnitAlert 9. ERROR. This shouldn't happen, alertQueue had multiple matches and it is a pain to remove multiple at once. duplicates="..tostring(#removeHeapNums)..", removeHeapNums="..tableToString(removeHeapNums))
+          debugger("addUnitToAlertQueue 9. ERROR. This shouldn't happen, alertQueue had multiple matches and it is a pain to remove multiple at once. duplicates="..tostring(#removeHeapNums)..", removeHeapNums="..tableToString(removeHeapNums))
         end
         local k, rHN = next(removeHeapNums)
         if rHN then
@@ -931,39 +986,34 @@ function teamsManager:addUnitAlert(unitObj, typeEventRulesTbl) -- Use [unit or a
           if removeObj.alertRulesTbl["sharedAlerts"] then
             unitOrArmyObj = unitOrArmyObj.parent
           end
-          -- if not self:initEventLastAlerts(unitOrArmyObj, removeObj.alertRulesTbl["unitType"], removeObj.alertRulesTbl["event"]) then
-          --   debugger("addUnitAlert 10. ERROR, NIL returned from initEventLastAlerts. unitObj=" .. type(unitOrArmyObj))
-          --   return nil
-          -- end
           unitOrArmyObj["lastAlerts"][removeObj.alertRulesTbl["unitType"]][removeObj.alertRulesTbl["event"]]["isQueued"] = false
         end
       end
       if useNewAlert and bestPriority == alertVarsTbl["priority"] then
-        if debug then debugger("addUnitAlert 11. Adding requested alert after removing one with worse priority.") end
+        if debug then debugger("addUnitToAlertQueue 11. Adding requested alert after removing one with worse priority.") end
         alertQueue:insert(unitObj, alertVarsTbl, alertVarsTbl["priority"])
         return true
       end
-      if debug then debugger("addUnitAlert 12. alertQueue already has same or better, no need to add the new one.") end
+      if debug then debugger("addUnitToAlertQueue 12. alertQueue already has same or better, no need to add the new one.") end
       return false
     end
   end
-  if debug then debugger("addUnitAlert 13. SUCCESS. There were no matches. Adding to queue.") end
+  if debug then debugger("addUnitToAlertQueue 13. SUCCESS. There were no matches. Adding to queue.") end
   alertQueue:insert(unitObj, alertVarsTbl, alertVarsTbl["priority"])
   return true
 end
 
 -- {defID = {type = {event = {rules}}}}
 -- components: {type = {event = {rules}
--- Returns single-level key/value table with everything needed for AddUnitAlert
+-- Returns single-level key/value table with everything needed for addUnitToAlertQueue
 function teamsManager:getEventRulesNotifyVars(unitObj,typeEventRulesTbl ) -- validates and returns alertVarsTbl key,pair: {teamID, unitType, event, lastNotify, sharedAlerts, priority, reAlertSec, maxAlerts, alertCount, maxQueueTime, alertSound, mark, ping, threshMinPerc, threshMaxPerc}
   if debug then debugger("getEventRulesNotifyVars 1. unitObj=" .. type(unitObj) .. ", typeEventRulesTbl=" .. type(typeEventRulesTbl)) end
   local isValidTbl,typeCount,eventCount,rulesCount = self:validTypeEventRulesTbls(typeEventRulesTbl)
   if isValidTbl == false or type(unitObj) ~= "table" or unitObj.defID == nil then
     debugger("getEventRulesNotifyVars 2. ERROR, returning nil. NOT unitObj or typeEventRulesTbl=" .. type(typeEventRulesTbl) .. ", unitObj=" .. type(unitObj))
     return nil
-  end
-  if not isValidTbl or typeCount ~= 1 or eventCount ~= 1 then
-    debugger("getEventRulesNotifyVars 3. ERROR. Returning nil. Bad typeEventRulesTbl. validTbl=" .. tostring(isValidTbl) .. ", typeCount=" .. tostring(typeCount) .. ", eventCount=" .. tostring(eventCount) .. ", rulesCount=" .. tostring(rulesCount) .. ", tableToString=" .. tableToString(typeEventRulesTbl))
+  elseif not isValidTbl or typeCount ~= 1 or eventCount ~= 1 then
+    debugger("getEventRulesNotifyVars 3. ERROR. Returning nil. Bad typeEventRulesTbl or multiple events provided. validTbl=" .. tostring(isValidTbl) .. ", typeCount=" .. tostring(typeCount) .. ", eventCount=" .. tostring(eventCount) .. ", rulesCount=" .. tostring(rulesCount) .. ", tableToString=" .. tableToString(typeEventRulesTbl))
     return nil
   end
   local unitType, eventTbl = next(typeEventRulesTbl)
@@ -976,28 +1026,10 @@ function teamsManager:getEventRulesNotifyVars(unitObj,typeEventRulesTbl ) -- val
     debugger("getEventRulesNotifyVars 3.2. ERROR. Returning nil. Bad event or rulesTbl. event=" .. tostring(event) .. ", rulesTbl=" .. type(rulesTbl) .. ", tableToString=" .. tableToString(typeEventRulesTbl))
     return nil
   end
-  -- should not be needed
-  -- local maxAlerts = rulesTbl["maxAlerts"] or 0
-  -- local reAlertSec = rulesTbl["reAlertSec"] or 10
-  -- local priority = rulesTbl["priority"] or 5
-  -- local maxQueueTime = rulesTbl["maxQueueTime"] or false -- false or number
-  -- local mark = rulesTbl["mark"] or false -- t/f or string
-  -- local ping = rulesTbl["ping"] or false -- t/f or string
-  -- local alertSound = rulesTbl["alertSound"] or false -- false or string
-  -- local sharedAlerts = rulesTbl["sharedAlerts"] or false -- nil or true
-  -- local threshMinPerc = rulesTbl["threshMinPerc"] or 0 -- number 0-.999
-  -- local threshMaxPerc = rulesTbl["threshMaxPerc"] or 1 -- number 0.001-1
-  -- if type(maxAlerts) ~= "number" or type(reAlertSec) ~= "number" or type(priority) ~= "number" or ((type(maxQueueTime) ~= "number" and type(maxQueueTime) ~= "boolean") or (type(maxQueueTime) == "boolean" and maxQueueTime ~= false)) or (type(mark) ~= "string" and type(mark) ~= "boolean") or (type(ping) ~= "string" and type(ping) ~= "boolean") or (type(alertSound) ~= "string" and type(alertSound) ~= "boolean") or (type(alertSound) == "boolean" and alertSound ~= false) or type(sharedAlerts) ~= "boolean" or (type(threshMinPerc) ~= "number" or (threshMinPerc < 0 or threshMinPerc >= 1)) or (type(threshMaxPerc) ~= "number" or (threshMaxPerc > 1 or threshMaxPerc <= threshMinPerc)) then
-  --   debugger("getEventRulesNotifyVars 4. ERROR. Returning nil. Bad threshMinPerc, threshMaxPerc, sharedAlerts, mark, ping, alertSound, maxAlerts, reAlertSec or priority=" .. tostring(priority) .. ", reAlertSec=" .. tostring(reAlertSec) .. ", maxAlerts=" .. tostring(maxAlerts) .. ", maxQueueTime=" .. tostring(maxQueueTime) .. ", threshMinPerc=" .. tostring(threshMinPerc) .. ", threshMaxPerc=" .. tostring(threshMaxPerc) .. ", tableToString=" .. tableToString(typeEventRulesTbl))
-  --   return nil
-  -- end
   local alertBaseObj = unitObj
   if rulesTbl["sharedAlerts"] then
     alertBaseObj = unitObj.parent
   end
-  -- if not unitObj.parent:initEventLastAlerts(alertBaseObj, unitType, event) then
-  --   debugger("getEventRulesNotifyVars 4.1. ERROR. Returning nil. Bad alertCount or lastSharedNotify=")
-  -- end
   local lastNotify = alertBaseObj["lastAlerts"][unitType][event]["lastNotify"]
   local alertCount = alertBaseObj["lastAlerts"][unitType][event]["alertCount"]
   if type(lastNotify) ~= "number" or type(alertCount) ~= "number" then
@@ -1005,6 +1037,40 @@ function teamsManager:getEventRulesNotifyVars(unitObj,typeEventRulesTbl ) -- val
     return nil
   end
   return {["teamID"]=unitObj.parent.teamID, ["unitType"]=unitType, ["event"]=event, ["lastNotify"]=lastNotify, ["sharedAlerts"]=rulesTbl["sharedAlerts"], ["priority"]=rulesTbl["priority"], ["reAlertSec"]=rulesTbl["reAlertSec"], ["maxAlerts"]=rulesTbl["maxAlerts"], ["alertCount"]=alertCount, ["maxQueueTime"]=rulesTbl["maxQueueTime"], ["alertSound"]=rulesTbl["alertSound"], ["mark"]=rulesTbl["mark"], ["ping"]=rulesTbl["ping"], ["threshMinPerc"]=rulesTbl["threshMinPerc"], ["threshMaxPerc"]=rulesTbl["threshMaxPerc"]}
+end
+
+function teamsManager:getNextQueuedAlert()
+  if debug then debugger("getNextQueuedAlert 1. queueSize="..tostring(alertQueue:getSize())) end
+
+    -- discard until within maxQueueTime
+
+    local validFound = false
+    while validFound == false and alertQueue:getSize() > 0 do
+      local unitObj, alertVarsTbl, priority, queuedSec = alertQueue:pull()
+      if debug then debugger("getNextQueuedAlert 2. Pulled value=" .. type(unitObj) .. ", alertRulesTbl=" .. type(alertVarsTbl) .. ", priority=" .. tostring(priority) .. ", gameSec=" .. tostring(gameSec) .. ", unitName=" .. tostring(UnitDefs[unitObj.defID].translatedHumanName)) end
+      local gameSecs = Spring.GetGameSeconds()
+      if gameSecs <= queuedSec + alertVarsTbl["maxQueueTime"] then
+        if debug then debugger("getNextQueuedAlert 3. Valid found with remaining time="..queuedSec + alertVarsTbl["maxQueueTime"] - gameSecs) end
+        validFound = true
+      end
+      if alertVarsTbl["event"] == "idle" or alertVarsTbl["teamID"] ~= unitObj.parent.teamID or self.isLost or not unitObj:getIdle() then -- important: "NOT unitObj:getIdle()" used because it returns nil while waiting the 5 frames to ensure the idle isn't a false positive.
+        validFound = false
+      end
+      -- ADD LOS RULES HERE
+    -- if alert no longer valid, like idle or thresholdHP or not in line of sight -- {"created","finished","idle","damaged","taken","destroyed","los","enteredAir","stockpile","thresholdHP"}
+
+      local alertBaseObj = unitObj
+      if alertVarsTbl["sharedAlerts"] then
+        alertBaseObj = unitObj.parent
+      end
+      alertBaseObj = alertBaseObj["lastAlerts"][alertVarsTbl["unitType"]][alertVarsTbl["event"]]
+      local gameSec = Spring.GetGameSeconds()
+      if validFound then
+        alertBaseObj["lastNotify"] = gameSec
+        alertBaseObj["alertCount"] = (alertBaseObj["alertCount"] + 1)
+      end
+      alertBaseObj["isQueued"] = false
+  end
 end
 
 -- {value = value, alertRulesTbl = alertRulesTbl, priority = priority, queuedTime = Spring.GetGameSeconds()}
@@ -1071,6 +1137,13 @@ function teamsManager:validTypeEventRulesTbls(typeTbl) -- , returnCounts returnC
         rulesTbl["maxAlerts"] = type(rulesTbl["maxAlerts"]) == "number" and rulesTbl["maxAlerts"] or nil
         rulesTbl["reAlertSec"] = type(rulesTbl["reAlertSec"]) == "number" and rulesTbl["reAlertSec"] or 15
         rulesTbl["priority"] = type(rulesTbl["priority"]) == "number" and rulesTbl["priority"] or 5
+        rulesTbl["messageTxt"] = type(rulesTbl["messageTxt"]) == "string" and rulesTbl["messageTxt"] or nil -- string or nil  -- , messageTo="me",messageTxt="messageTxt"
+        if type(rulesTbl["messageTxt"]) ~= "string" or rulesTbl["messageTxt"] == "" then
+          rulesTbl["messageTo"] = nil
+          rulesTbl["messageTxt"] = nil
+        elseif type(rulesTbl["messageTo"]) ~= "string" or (rulesTbl["messageTo"] ~= "all" and rulesTbl["messageTo"] ~= "allies" and rulesTbl["messageTo"] ~= "spectators" ) then
+          rulesTbl["messageTo"] = "me"
+        end
         if type(rulesTbl["threshMinPerc"]) ~= "number" or rulesTbl["threshMinPerc"] < 0 then
           rulesTbl["threshMinPerc"] = 0
         elseif rulesTbl["threshMinPerc"] >= 1 then
@@ -1218,8 +1291,8 @@ function pArmyManager:createUnit(unitID, defID)
   aUnit.lastSetIdle = gameSecs - 5  -- If didn't set, then would throw error for trying to use math on a nil value
   local eventTble = aUnit:getTypesRulesForEvent("created", true, false)
   if type(eventTble) == "table" then
-    if debug then debugger("createUnit 9. Has rules for created. Sending to addUnitAlert(). unitID=" .. type(aUnit.unitID) .. ", unitDefID=" .. type(aUnit.defID) .. ", teamID=" .. type(self.teamID)) end
-    teamsManager:addUnitAlert(aUnit, eventTble)
+    if debug then debugger("createUnit 9. Has rules for created. Sending to addUnitToAlertQueue(). unitID=" .. type(aUnit.unitID) .. ", unitDefID=" .. type(aUnit.defID) .. ", teamID=" .. type(self.teamID)) end
+    teamsManager:addUnitToAlertQueue(aUnit, eventTble)
   end
   if debug or self.debug then debugger("createUnit 10. aUnit.ID=" .. tostring(aUnit.ID) .. ", aUnit.defID=" .. tostring(aUnit.defID) .. ", aUnit.teamID=" .. tostring(aUnit.parent.teamID) .. ", translatedHumanName=" .. tostring(UnitDefs[defID].translatedHumanName)) end
   debug = false
@@ -1285,7 +1358,8 @@ function pArmyManager:getTypesRulesForEvent(defID, event, topPriorityOnly, canAl
 end
 
 function pArmyManager:canAlertNow(unitObj, typeEventRulesTbl) -- only has 1 Type and 1 Event -- {type = {event = {rules}}}
-  if debug or self.debug then debugger("canAlertNow 1. unitObj=".. type(unitObj)..", typeEventRulesTbl="..type(typeEventRulesTbl)) end
+  debug = true
+if debug or self.debug then debugger("canAlertNow 1. unitObj=".. type(unitObj)..", typeEventRulesTbl="..type(typeEventRulesTbl)) end
   if type(unitObj) ~= "table" or type(unitObj.parent.teamID) ~= "number" or type(typeEventRulesTbl) ~= "table" then
     debugger("canAlertNow 2. ERROR, returning nil. Need unitObj and typeEventRulesTbl. Can't initEventLastAlerts(). unitObj=".. type(unitObj)..", typeEventRulesTbl="..type(typeEventRulesTbl))
     return nil
@@ -1306,12 +1380,13 @@ function pArmyManager:canAlertNow(unitObj, typeEventRulesTbl) -- only has 1 Type
   end
   alertBaseObj = alertBaseObj["lastAlerts"][aType][anEvent]
   local gameSecs = Spring.GetGameSeconds()
-  if debug then debugger("canAlertNow 5. Too soon or no alert rules. isQueued="..tostring(alertBaseObj["isQueued"])..", timing=" .. tostring(gameSecs) .. "<" .. tostring(alertBaseObj["lastNotify"] + aRulesTbl["reAlertSec"]) .. ", or reached maxAlerts=" .. tostring(alertBaseObj["alertCount"])  .. "/" .. tostring(aRulesTbl["maxAlerts"])..", mark="..tostring(aRulesTbl["mark"])..", ping="..tostring(aRulesTbl["ping"])..", alertSound="..tostring(aRulesTbl["alertSound"]) .. ", tableToString=" .. tableToString(aRulesTbl)) end
   if ((type(aRulesTbl["mark"]) ~= "string") and (type(aRulesTbl["ping"]) ~= "string") and type(aRulesTbl["alertSound"]) ~= "string") or alertBaseObj["isQueued"] or gameSecs < alertBaseObj["lastNotify"] + aRulesTbl["reAlertSec"] or (aRulesTbl["maxAlerts"] ~= 0 and alertBaseObj["alertCount"] >= aRulesTbl["maxAlerts"]) then
     if debug then debugger("canAlertNow 5. Too soon or no alert rules. isQueued="..tostring(alertBaseObj["isQueued"])..", timing=" .. tostring(gameSecs) .. "<" .. tostring(alertBaseObj["lastNotify"] + aRulesTbl["reAlertSec"]) .. ", or reached maxAlerts=" .. tostring(alertBaseObj["alertCount"]) .. "/" .. tostring(aRulesTbl["maxAlerts"])..", mark="..tostring(aRulesTbl["mark"])..", ping="..tostring(aRulesTbl["ping"])..", alertSound="..tostring(aRulesTbl["alertSound"]) .. ", tableToString=" .. tableToString(aRulesTbl)) end
+    debug = false
     return false
   end
   if debug or self.debug then debugger("pArmyManager:canAlertNow 6. TRUE. unitObj=".. type(unitObj)..", typeEventRulesTbl="..type(typeEventRulesTbl)) end
+  debug = false
   return true
 -- lastAlerts[aType][event]["lastNotify"] = 0
 -- lastAlerts[aType][event]["alertCount"] = 0
@@ -1434,7 +1509,7 @@ function pUnit:setIdle()
       -- end
       local typeRules = self:getTypesRulesForEvent("idle", true, true)
       if typeRules then
-        teamsManager:addUnitAlert(self, typeRules)
+        teamsManager:addUnitToAlertQueue(self, typeRules)
       end
     end
     self.lastSetIdle = Spring.GetGameFrame()
@@ -1506,10 +1581,10 @@ function pUnit:setLost(destroyed) -- destroyed = true default
   self.coords = {x=x, y=y, z=z}
   destroyed = destroyed or true
   self:setNotIdle() -- Removes it from idle lists/queues
-  if type(self.parent.unitsLost) ~= "table" then
-    self.parent.unitsLost = {}
+  if type(self.parent["unitsLost"]) ~= "table" then
+    self.parent["unitsLost"] = {}
   end
-  self.parent.unitsLost[self.ID] = self
+  self.parent["unitsLost"][self.ID] = self
   self.parent.units[self.ID] = nil
   local unitTypes = self:getTypesRules() -- {type = {event = {rules}}}} -- Remove unit from all Type/Event lists in parent army (except Lost)
   if debug or self.debug then debugger("setLost 4. About to try removing unit from all Type/Event lists in parent army (except Lost). translatedHumanName=" .. tostring(UnitDefs[self.defID].translatedHumanName) .. ", type(unitTypes)=".. type(unitTypes)) end
@@ -1534,13 +1609,13 @@ function pUnit:setLost(destroyed) -- destroyed = true default
     local destroyedEvent = self:getTypesRulesForEvent("destroyed", true, false)
     if destroyedEvent then
       if debug or self.debug then debugger("setLost 7. Unit has rule to alert when destroyed, unitName=" .. tostring(UnitDefs[self.defID].translatedHumanName)) end
-      teamsManager:addUnitAlert(self, destroyedEvent) -- {type = {event = {rules}}}
+      teamsManager:addUnitToAlertQueue(self, destroyedEvent) -- {type = {event = {rules}}}
     end
   else
     local takenEvent = self:getTypesRulesForEvent("taken", true, false)
     if takenEvent then
       if debug or self.debug then debugger("setLost 8. Unit has rule to alert when taken, unitName=" .. tostring(UnitDefs[self.defID].translatedHumanName)) end
-      teamsManager:addUnitAlert(self, takenEvent) -- {type = {event = {rules}}}
+      teamsManager:addUnitToAlertQueue(self, takenEvent) -- {type = {event = {rules}}}
     end
   end
   self.lost = Spring.GetGameSeconds()
@@ -1630,10 +1705,24 @@ function pUnit:setTypes()
 end
 
 function pUnit:hasTypeEventRules(aType,event)
-  if debug or self.debug then debugger("pUnit:hasTypeEventRules 1. SHELL returns from armyManager ID=" .. tostring(self.ID) .. ", defID=".. tostring(self.defID) .. ", teamID=".. tostring(self.parent.teamID)) end
+  if debug or self.debug then debugger("hasTypeEventRules 1. SHELL returns from armyManager ID=" .. tostring(self.ID) .. ", defID=".. tostring(self.defID) .. ", teamID=".. tostring(self.parent.teamID)) end
   return self.parent:hasTypeEventRules(self.defID,aType,event)
 end
 
+function pUnit:getUnitPosition()
+  if debug or self.debug then debugger("getUnitPosition 1. Getting unit's current position, else sending back the most recent coords." .. tostring(self.ID) .. ", defID=".. tostring(self.defID) .. ", teamID=".. tostring(self.parent.teamID).. tostring(UnitDefs[unitDefID].translatedHumanName)) end
+  local x,y,z = Spring.GetUnitPosition( self.ID )
+  if type(x) == "number" then
+    if debug or self.debug then debugger("getUnitPosition 2. Returning unit's current position coords="..tostring(x).."-"..tostring(y).."-"..tostring(z)..", unitID" .. tostring(self.ID) .. ", defID=".. tostring(self.defID) .. ", teamID=".. tostring(self.parent.teamID).. tostring(UnitDefs[unitDefID].translatedHumanName)) end
+    self.coords = {x=x, y=y, z=z}
+    return x, y, z
+    elseif type(self.coords.x) == "number" then
+    if debug or self.debug then debugger("getUnitPosition 3. Returning unit's old position because GetUnitPosition returned nil. coords="..tostring(x).."-"..tostring(y).."-"..tostring(z)..", unitID" .. tostring(self.ID) .. ", defID=".. tostring(self.defID) .. ", teamID=".. tostring(self.parent.teamID).. tostring(UnitDefs[unitDefID].translatedHumanName)) end
+    return self.coords.x, self.coords.y, self.coords.z
+  end
+  if debug or self.debug then debugger("getUnitPosition 4. FAIL. Unable to return any coordss." .. tostring(self.ID) .. ", defID=".. tostring(self.defID) .. ", teamID=".. tostring(self.parent.teamID).. tostring(UnitDefs[unitDefID].translatedHumanName)) end
+  return nil, nil, nil
+end
 -- ################################################## Custom/Expanded Unit methods starts here #################################################
 
 
@@ -1709,15 +1798,10 @@ function widget:PlayerChanged(playerID)
 	end
 end
 
--- if there's type rules, AND the unit's event matches a type... @@@@@@$$$$$$$$$$$$$$$$##################^^^^^^^^^^^^^^^^^^^^%%%%%%%%%%%%%%%%%%
--- build logic for maxAlerts=0, reAlertSec=15, mark=nil, alertSound="sounds/commands/cmd-selfd.wav" (Track in armyManager or teamsManager?) Stored how?
--- {destroyed = {maxAlerts=0, reAlertSec=1, mark=nil, alertSound=nil}} -- No alert means it only destroyed enemy mex will be tracked. To have it track alive mex, use "los"
-
-
 function widget:UnitIdle(unitID, defID, teamID)
-  if debug then debugger("widget:UnitIdle 1. UnitDefs[" .. tostring(defID) .. "].translatedHumanName=" .. tostring(UnitDefs[defID].translatedHumanName) .. ", unitID=" .. tostring(unitID) .. ", unitTeam=" .. tostring(teamID)) end
+  if debug then debugger("widget:UnitIdle 1. unitID=" .. tostring(unitID)..", defID=" .. tostring(defID) .. ", teamID=" .. tostring(teamID) .. ", translatedHumanName=" .. tostring(UnitDefs[defID].translatedHumanName)) end
   local anArmy = teamsManager:getArmyManager(teamID)
-  if anArmy and anArmy:hasTypeEventRules(defID) then
+  if anArmy and anArmy:hasTypeEventRules(defID, nil, "idle") then
     local unit = teamsManager:getOrCreateUnit(unitID, defID, teamID)
     if unit then
       unit:setIdle()-- automatically alerts for this
@@ -1726,23 +1810,25 @@ function widget:UnitIdle(unitID, defID, teamID)
 end
 
 function widget:UnitDestroyed(unitID, defID, unitTeam, attackerID, attackerDefID, attackerTeam)	-- Triggered when unit dies or construction canceled/destroyed while being built
-  local x,y,z = Spring.GetUnitPosition( unitID )
-  if debug then debugger("UnitDestroyed unitID=" .. unitID .. ", translatedHumanName=" .. UnitDefs[defID].translatedHumanName..", x=".. x ..", y=".. y ..", z=".. z) end
+  if debug then debugger("UnitDestroyed 1. Unit taken. unitID=" .. unitID .. ", unitDefID=" .. defID .. ", attackerID=" .. attackerID .. ", attackerDefID=" .. attackerDefID .. ", attackerTeam=" .. attackerTeam) end
+local x,y,z = Spring.GetUnitPosition( unitID )
+  if debug then debugger("UnitDestroyed 2 unitID=" .. unitID .. ", translatedHumanName=" .. UnitDefs[defID].translatedHumanName..", x=".. x ..", y=".. y ..", z=".. z) end
   local army = teamsManager:getArmyManager(unitTeam)
-  if army and army:hasTypeEventRules(defID) then
+  if army and army:hasTypeEventRules(defID, nil, "destroyed") then
     army:getOrCreateUnit(unitID, defID):setLost() -- automatically alerts for this
   end
 end
 
 function widget:UnitTaken(unitID, defID, oldTeamID, newTeamID)
+  if debug then debugger("UnitTaken 1. Unit taken. unitID=" .. unitID .. ", unitDefID=" .. defID  .. ", oldTeamID=" .. oldTeamID .. ", newTeamID=" .. newTeamID) end
   if teamsManager:getArmyManager(oldTeamID):hasTypeEventRules(defID) or teamsManager:getArmyManager(newTeamID):hasTypeEventRules(defID) then
     local oldArmy = teamsManager:getArmyManager(oldTeamID)
     if oldArmy then
-      local unit = oldArmy:getOrCreateUnit(unitID, defID)
-      if unit then
+      local aUnit = oldArmy:getOrCreateUnit(unitID, defID)
+      if aUnit then
         teamsManager:moveUnit(unitID, defID, oldTeamID, newTeamID) -- automatically alerts for this
         if newTeamID == myTeamID then
-          unit:getIdle()
+          aUnit:getIdle() -- automatically alerts for this
         end
       end
     end
@@ -1750,26 +1836,20 @@ function widget:UnitTaken(unitID, defID, oldTeamID, newTeamID)
 end
 
 function widget:UnitCreated(unitID, defID, teamID, builderID)
-  if debug then debugger("UnitCreated 1. Unit construction started. unitID=" .. unitID .. ", unitDefID=" .. defID .. ", teamID=" .. teamID) end
+  if debug then debugger("UnitCreated 1. Unit construction started. unitID=" .. unitID .. ", unitDefID=" .. defID .. ", teamID=" .. teamID .. ", builderID=" .. builderID) end
   local army = teamsManager:getArmyManager(teamID)
-  if army and army:hasTypeEventRules(defID) then
+  if army and army:hasTypeEventRules(defID, nil, "created") then
     army:getOrCreateUnit(unitID, defID) -- automatically alerts for this
   end
 end
 
 function widget:UnitFinished(unitID, defID, teamID, builderID)
-  if debug then debugger("UnitFinished 1 is now completed and ready. unitID=" .. unitID .. ", unitDefID=" .. defID .. ", teamID=" .. teamID) end
+  if debug then debugger("UnitFinished 1 is now completed and ready. unitID=" .. unitID .. ", unitDefID=" .. defID .. ", teamID=" .. teamID .. ", builderID=" .. builderID) end
   local army = teamsManager:getArmyManager(teamID)
-  if army and army:hasTypeEventRules(defID) then
+  if army and army:hasTypeEventRules(defID, nil, "finished") then
     local aUnit = army:getOrCreateUnit(unitID, defID)
-    if aUnit then
-      aUnit:getIdle()
-      local eventTble = aUnit:getTypesRulesForEvent("finished", true, false)
-      if type(eventTble) == "table" then
-        if debug then debugger("UnitFinished 2. Has rules for finished. Sending to addUnitAlert(). unitID=" .. unitID .. ", unitDefID=" .. defID .. ", teamID=" .. teamID) end
-        teamsManager:addUnitAlert(aUnit, eventTble)
-      end
-    end
+    if debug then debugger("UnitFinished 2. Sending alert. unitID=" .. unitID .. ", unitDefID=" .. defID .. ", teamID=" .. teamID .. ", builderID=" .. builderID) end
+    teamsManager:addUnitToAlertQueue(aUnit, aUnit:getTypesRulesForEvent("finished", true, false))
   end
 end
 
@@ -1799,11 +1879,6 @@ local function checkQueuesOfInactiveUnits() -- Only checks units with idle event
       end
     end
   end
-  -- for unitID, v in pairs(idlingUnits) do
-	-- 	if not isUnitIdle(unitID) then
-	-- 		markUnitAsNotIdle(unitID)
-	-- 	end
-	-- end
 end
 
 -- function widget:UnitDamaged(unitID, unitDefID, unitTeam, damage, paralyzer, weaponDefID, projectileID, attackerID, attackerDefID, attackerTeam)
@@ -1828,9 +1903,7 @@ end
 -- 		end
 -- 	end
 -- end
--- local aUnit = teamsManager:createUnit(5506, 244, 0) -- Factory
--- local bUnit = teamsManager:createUnit(13950, 245, 0) -- Con plane
--- local bUnit = teamsManager:createUnit(?, 276, 0) -- Con plane
+
 function widget:CommandsChanged() -- Called when the command descriptions changed, e.g. when selecting or deselecting a unit. Because widget:UnitIdle doesn't happen when factory queue is removed by player
   if debug then debugger("CommandsChanged 1. Called when the command descriptions changed, e.g. when selecting or deselecting a unit.") end
 	-- local factories = teamsManager.myArmyManager["factory"]
@@ -1839,26 +1912,21 @@ function widget:CommandsChanged() -- Called when the command descriptions change
       if debug then debugger("CommandsChanged 2. unitID=" .. unitID .. ", defID=" .. unit.defID .. ", isFactory=" .. tostring(unit.isFactory) .. ", translatedHumanName=" .. tostring(UnitDefs[unit.defID].translatedHumanName)) end
       if unit:getIdle() == true then -- automatically adds unit to idle alert queue if it applies
         if debug then debugger("CommandsChanged 3. Factory added to parent[idle] table. unitID=" .. unitID .. ", defID=" .. unit.defID) end
-        -- markUnitAsIdle(unitID)
       else
         if debug then debugger("CommandsChanged 4. Factory NOT idle. unitID=" .. unitID .. ", defID=" .. unit.defID) end
-        -- markUnitAsNotIdle(unitID)
       end
     end
   end
-  -- checkQueuesOfFactories()
 end
+
 -- figure out logic for if new alert is added to queue
 function widget:GameFrame(frame)
   -- if warnFrame >= 1 then -- with 30 UpdateInterval, would run every half second
   if idlingUnitCount > 0 then -- or numAlerts > 0 
     if warnFrame >= 0 then
-      checkQueuesOfInactiveUnits()
-      if idlingUnitCount > 0 then -- still idling after we checked the queues
-        Spring.PlaySoundFile(TestSound, 1.0, 'ui')  --              ############ Sound File Enable
-        -- Here is where prioritization should go 
-        -- Get and use BuilderUnitDefIDs[unitDefID] to get local builderType = (1,2,3)
-        -- Use builderType to play correct sound notification
+      checkQueuesOfInactiveUnits() -- Needed
+      if priorityQueue:isEmpty() == false then -- still idling after we checked the queues
+        teamsManager:alert()
       end
     end
 		warnFrame = (warnFrame + 1) % UpdateInterval
@@ -1931,41 +1999,6 @@ local function getEventLastNotify(unitOrArmyObj, unitType, event) -- teamObj = s
   return alertBaseObj["lastNotify"] or 0, alertBaseObj["alertCount"] or 0, alertBaseObj["isQueued"] or false
 end
 
-local function addAlert() -- placeholder for alerts that aren't unit specific #### Far-off dream 
-  if debug then debugger("addAlert 1. ") end
-end
-
-    -- may have to search with multiple same-event to see if one is not on cooldown
-    
-    -- if unit/sharedAlert in queue, find with: 
-      -- indivAlerts: unitObj = alertQueue.heap[#].value -- value = unitObj
-      -- sharedAlerts: teamID, unitType, event
-
-    -- if better priority, replace if matched: 
-    -- if not better priority, reject new: 
-  
-    -- If better priority damage/thresholdHP alert, add it (if priority > 0) and remove other from queue 
-    -- If in queue and destroyed/lost, remove from queue, or it pulls new units until unit.isLost = false
-
-  -- alertQueue:insert(value, alertRulesTbl, priority) -- alertRulesTbl should have all (key,pair) vars that can be used to determine whether and how to alert key,pair: {teamID, unitType, event, lastNotify, sharedAlerts, priority, reAlertSec, maxAlerts, alertCount, maxQueueTime, alertSound, mark, ping, threshMinPerc, threshMaxPerc}
-  -- alertQueue:peek(heapNum) -- Returns/Keeps the top/requested element, returning vars: value, alertRulesTbl, priority, queuedTime
-
- -- Create priority queue to enable the following
-  -- If already in queue for same event
-    -- if better priority: replace
-    -- if not better priority: reject new
-  -- If already in queue for different event?
-    -- Add it
-  -- If better priority damage/thresholdHP alert, add it (if priority > 0) and remove other from queue 
-    -- thresholdHP should probably be demoted to a rule
-    -- look with damage eventRulesTbl topPriorityOnly
-  -- No, don't do this. If, event not desroyed and, in queue when destroyed/lost, remove from queue, or it pulls new units until unit.isLost = false
--- validEvents = {"idle","damaged","destroyed","created","finished","los","enteredAir","stockpile","thresholdHP"}
--- validEventRules = {"sharedAlerts", "priority", "reAlertSec", "maxAlerts", "maxQueueTime", "alertSound", "mark", "ping", "threshMinPerc", "threshMaxPerc"} -- if sharedAlerts it also contains: alertCount, lastNotify. ELSE these are stored in the unit with unitObj.lastAlerts[unitType][event] = {lastNotify=num,alertCount=num} 
-
-
-
-
 debug = false
 if not makeRelTeamDefsRules() then
 debug = false
@@ -2035,10 +2068,16 @@ local enemyCUnit = teamsManager:createUnit(24908, 49, 2) -- Enemy Commander
 -- TestingArea
 -- aUnit.debug = true
 
-local cUnitRules = cUnit:getTypesRulesForEvent("idle", false, false)
-local aUnitRules = aUnit:getTypesRulesForEvent("idle", true, false)
-local bUnitRules = bUnit:getTypesRulesForEvent("idle", true, true)
-local enemyCUnitRules = enemyCUnit:getTypesRulesForEvent("los", true, false)
+-- lastAlerts[aType][event]["lastNotify"] = 0
+-- lastAlerts[aType][event]["alertCount"] = 0
+-- lastAlerts[aType][event]["isQueued"] = false
+
+local cUnitRules = cUnit:getTypesRulesForEvent("idle", true, true)
+-- local aUnitRules = aUnit:getTypesRulesForEvent("idle", true, false)
+-- local bUnitRules = bUnit:getTypesRulesForEvent("idle", true, true)
+cUnit["lastAlerts"]["commander"]["idle"]["lastNotify"] = Spring.GetGameSeconds()
+cUnit:getTypesRulesForEvent("idle", true, true)
+-- local enemyCUnitRules = enemyCUnit:getTypesRulesForEvent("los", true, false)
 
 debug = true
 
@@ -2048,13 +2087,13 @@ debug = true
 local kioi = {commander = {idle = {lastNotify=0, sharedAlerts=false, priority=2, reAlertSec=15, maxAlerts=false, alertCount=1, maxQueueTime=nil, alertSound="sounds/commands/cmd-selfd.wav", mark=nil, ping=false, threshMinPerc=.5, threshMaxPerc=0.9}}}
 -- cUnit.parent:getTypesRulesForEvent(cUnit.defID, "idle", true, false)
 -- debugger("Starting myCommander")
--- teamsManager:addUnitAlert( cUnit,cUnitRules )
+-- teamsManager:addUnitToAlertQueue( cUnit,cUnitRules )
 -- debugger("Starting my T2 Plane Factory")
--- teamsManager:addUnitAlert(aUnit,aUnitRules )
+-- teamsManager:addUnitToAlertQueue(aUnit,aUnitRules )
 -- debugger("Starting my Adv. Con plane")
--- teamsManager:addUnitAlert(bUnit,bUnitRules )
+-- teamsManager:addUnitToAlertQueue(bUnit,bUnitRules )
 -- debugger("Starting Enemy Commander")
--- teamsManager:addUnitAlert(enemyCUnit,enemyCUnitRules )
+-- teamsManager:addUnitToAlertQueue(enemyCUnit,enemyCUnitRules )
 
 -- alertQueue:insert(aUnit,kioi, 0)
 
