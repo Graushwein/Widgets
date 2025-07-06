@@ -43,7 +43,7 @@ local trackAllAlliedUnitsRules = {} --
 
 -- Newly added event types will need to be added here
 local validEvents = {"created","finished","idle","damaged","taken","destroyed","los","enteredAir","stockpile","thresholdHP"}
-local validEventRules = {"sharedAlerts", "priority", "reAlertSec", "maxAlerts", "alertDelay", "maxQueueTime", "alertSound", "mark", "ping", "threshMinPerc", "threshMaxPerc","messageTo","messageTxt"}
+local validEventRules = {"sharedAlerts", "priority", "reAlertSec", "maxAlerts", "alertDelay", "maxQueueTime", "alertSound", "mark", "ping","messageTo","messageTxt", "threshMinPerc", "threshMaxPerc"}
 -- most validEventRules are used in getEventRulesNotifyVars(typeEventRulesTbl, unitObj)
 -- mark = only you see. ping = ALL ALLIES see it. Be careful with ping
 -- Priority from 0-99999, decimals okay, default 5. 0 ignores minSecsBetweenNotifications and will notify immediately
@@ -74,8 +74,8 @@ local myCommanderRules = {idle = {priority=2, maxAlerts=0, reAlertSec=5, alertDe
 local myConstructorRules = {idle = {sharedAlerts=true, maxAlerts=0, reAlertSec=10, alertDelay=.1, mark="Constructor Idle", alertSound="sounds/commands/cmd-selfd.wav"}, destroyed = {maxAlerts=0, reAlertSec=1, mark="Con Lost", alertSound=nil}}
 local myFactoryRules = {idle = {maxAlerts=0, reAlertSec=15, alertDelay=.1, mark="Factory Idle", alertSound="sounds/commands/cmd-selfd.wav"}, finished = {maxAlerts=0, reAlertSec=0, mark=nil, alertSound=nil}}
 local myRezBotRules = {idle = {sharedAlerts=true, maxAlerts=0, reAlertSec=15, alertDelay=.1, mark="RezBot Idle", messageTo="me",messageTxt="messageTxt"}, destroyed = {sharedAlerts=true, maxAlerts=0, reAlertSec=100, mark="Rezbot Lost", alertSound=nil}}
-local myMexRules = {destroyed = {maxAlerts=0, reAlertSec=1, mark="Mex Lost", alertSound=nil}, taken = {maxAlerts=0, reAlertSec=1, mark="Mex Taken", alertSound=nil}}
-local myEnergyGenRules = {finished = {maxAlerts=0, reAlertSec=1, mark=nil, alertSound=nil}, destroyed = {maxAlerts=0, reAlertSec=1, mark=nil, alertSound=nil}} -- reAlertSec only used if mark/sound wanted. Saved so custom code can do something with the information.
+local myMexRules = {destroyed = {maxAlerts=0, reAlertSec=2, mark="Mex Lost", alertSound=nil}, taken = {maxAlerts=0, reAlertSec=1, mark="Mex Taken", alertSound=nil}}
+local myEnergyGenRules = {finished = {maxAlerts=0, reAlertSec=20, mark=nil, alertSound=nil}, destroyed = {maxAlerts=0, reAlertSec=1, mark="Generator Lost", alertSound=nil}} -- reAlertSec only used if mark/sound wanted. Saved so custom code can do something with the information.
 local myRadarRules = {finished = {maxAlerts=0, reAlertSec=1, mark="Radar Built", alertSound="sounds/commands/cmd-selfd.wav"}, destroyed = {maxAlerts=0, reAlertSec=1, mark="Radar Lost", alertSound="sounds/commands/cmd-selfd.wav"}}
 -- local myRules = 
 -- To mitigate performance hits from "UnitDamaged()", could have a list of types/groups to check once every X frames/seconds
@@ -120,7 +120,7 @@ local enemyUnitsT3Rules = {}
 local enemyUnitsAirRules = {}
 local enemyUnitsAirT2Rules = {}
 local enemyNukeRules = {}
-local enemyNukeDefenseRules = {}
+local enemyAntiNukeRules = {}
 -- local enemyRules = {}
 local trackEnemyTypesRules = {
 	commander = enemyCommanderRules,
@@ -136,7 +136,7 @@ local trackEnemyTypesRules = {
 	air = enemyUnitsAirRules,
 	airT2 = enemyUnitsAirT2Rules,
 	nuke = enemyNukeRules,
-	nukeDefense = enemyNukeDefenseRules
+	antinuke = enemyAntiNukeRules
 }
 local trackSpectatorTypesRules = {}
 -- , messageTo="spectators",messageTxt="messageTxt"
@@ -1791,15 +1791,53 @@ if debug then debugger("makeRelTeamDefsRules 1.") end
       if unitDef.canAssist or unitDef.canAssist and (next(trackMyTypesRules["constructor"]) ~= nil or next(trackAllyTypesRules["constructor"]) ~= nil or next(trackEnemyTypesRules["constructor"]) ~= nil) then     -- check is this constructor was: unitDef.canConstruct and unitDef.canAssist 
         addToRelTeamDefsRules(unitDefID, "constructor")
         if debug then debugger("Assigning Constructor types with unitDefID[" .. unitDefID .. "].translatedHumanName=" .. UnitDefs[unitDefID].translatedHumanName) end
-      elseif unitDef.isFactory and (next(trackMyTypesRules["factory"]) ~= nil or next(trackAllyTypesRules["factory"]) ~= nil or next(trackEnemyTypesRules["factory"]) ~= nil) then
+      elseif unitDef.isBuilding and unitDef.isFactory and (next(trackMyTypesRules["factory"]) ~= nil or next(trackAllyTypesRules["factory"]) ~= nil or next(trackEnemyTypesRules["factory"]) ~= nil) then
         if debug then debugger("Assigning Factory types with unitDefID[" .. unitDefID .. "].translatedHumanName=" .. UnitDefs[unitDefID].translatedHumanName) end
         addToRelTeamDefsRules(unitDefID, "factory")
-        -- table.insert(FactoryDefIDs, unitDefID) -- Needed?
+        if unitDef.customParams.unitgroup == "buildert2" then
+          if debug then debugger("Assigning T2 Factory types with unitDefID[" .. unitDefID .. "].translatedHumanName=" .. UnitDefs[unitDefID].translatedHumanName) end
+          addToRelTeamDefsRules(unitDefID, "factoryT2")
+        end
       elseif idleRezAlert and unitDef.canResurrect and (next(trackMyTypesRules["rezBot"]) ~= nil or next(trackAllyTypesRules["rezBot"]) ~= nil or next(trackEnemyTypesRules["rezBot"]) ~= nil) then -- RezBot optional using idleRezAlert
         if debug then debugger("Assigning RezBot types with unitDefID[" .. unitDefID .. "].translatedHumanName=" .. UnitDefs[unitDefID].translatedHumanName) end
         addToRelTeamDefsRules(unitDefID, "rezBot")
       end
     end
+    if unitDef.isBuilding and unitDef.customParams and unitDef.customParams.metal_extractor then
+      if debug then debugger("Assigning Metal Extractor types with unitDefID[" .. unitDefID .. "].translatedHumanName=" .. UnitDefs[unitDefID].translatedHumanName) end
+        addToRelTeamDefsRules(unitDefID, "mex")
+    end
+    if unitDef.isBuilding and unitDef.customParams and unitDef.customParams.unitgroup == "energy" then
+      if debug then debugger("Assigning energyGen types with unitDefID[" .. unitDefID .. "].translatedHumanName=" .. UnitDefs[unitDefID].translatedHumanName) end
+        addToRelTeamDefsRules(unitDefID, "energyGen")
+    end
+    if unitDef.isBuilding and ((type(unitDef["radarDistance"]) == "number" and unitDef["radarDistance"] > 1999) or (type(unitDef["sonarDistance"]) == "number" and unitDef["sonarDistance"] > 850)) then
+      if debug then debugger("Assigning Radar types with unitDefID[" .. unitDefID .. "].translatedHumanName=" .. UnitDefs[unitDefID].translatedHumanName) end
+        addToRelTeamDefsRules(unitDefID, "radar")
+    end
+    if unitDef.customParams.unitgroup == "nuke" then
+      if debug then debugger("Assigning Nuke types with unitDefID[" .. unitDefID .. "].translatedHumanName=" .. UnitDefs[unitDefID].translatedHumanName) end
+      addToRelTeamDefsRules(unitDefID, "nuke")
+    end
+    if unitDef.customParams.unitgroup == "antinuke" then
+      debugger("Assigning antiNuke types with unitDefID[" .. unitDefID .. "].translatedHumanName=" .. UnitDefs[unitDefID].translatedHumanName)
+      addToRelTeamDefsRules(unitDefID, "antinuke")
+    end
+    local searchTxt = "Drone"
+    if unitDef.canFly and unitDef.canMove and not string.find(UnitDefs[unitDefID].translatedHumanName:lower(), searchTxt:lower()) then
+      if debug then debugger("Assigning air types with unitDefID[" .. unitDefID .. "].translatedHumanName=" .. UnitDefs[unitDefID].translatedHumanName) end
+      addToRelTeamDefsRules(unitDefID, "air")
+      -- ### TODO: Add airT2
+    end
+    if unitDef.customParams.techLevel == 2 then
+      debugger("Assigning T2 types with unitDefID[" .. unitDefID .. "].translatedHumanName=" .. UnitDefs[unitDefID].translatedHumanName)
+      addToRelTeamDefsRules(unitDefID, "unitsT2")
+    end
+    if unitDef.customParams.techLevel == 3 then
+      debugger("Assigning T3 types with unitDefID[" .. unitDefID .. "].translatedHumanName=" .. UnitDefs[unitDefID].translatedHumanName)
+      addToRelTeamDefsRules(unitDefID, "unitsT3")
+    end
+    
     -- if mex, radar...
     -- if next(trackAllMyUnitsRules) ~= nil or next(trackAllEnemyUnitsRules) ~= nil or next(trackAllAlliedUnitsRules) ~= nil then
       -- -- figure out how to do this. something like {hp, coords, destroyed}
@@ -2007,15 +2045,20 @@ teamsManager:makeAllArmies() -- Build all teams/armies
 -- local typeRules2,typeCount2,eventCount2,ruleCount2 = validTypeEventRulesTbls(priorityRules)
 -- debugger("priorityRules validTypeEventRulesTbls2=" .. tostring(typeRules2) .. ", typeCount2=" .. tostring(typeCount2) .. ", eventCount2=" .. tostring(eventCount2) .. ", ruleCount2=" .. tostring(ruleCount2) .. ", tableToString2=" .. tableToString(priorityRules))
 
--- local searchTxt = "Commander"
+-- local searchTxt = "Sonar"
 -- local aTeamNum = 0
 -- for unitDefID, unitDef in pairs(UnitDefs) do
 --   if string.find(UnitDefs[unitDefID].translatedHumanName:lower(), searchTxt:lower()) then
---     -- debugger(searchTxt .. " defID=" .. unitDefID .. ", name=" .. tostring(UnitDefs[unitDefID].translatedHumanName))
+--     debugger(searchTxt .. " defID=" .. unitDefID .. ", name=" .. tostring(UnitDefs[unitDefID].translatedHumanName))
 --     local index, foundUnitID = next(Spring.GetTeamUnitsByDefs ( aTeamNum, unitDefID)) -- return: nil | table unitTable = { [1] = number unitID, ... }
 --     if foundUnitID then
---       debugger("teamID=" .. aTeamNum .. ", " .. searchTxt .. " unitID=" .. tostring(foundUnitID) .. ", defID=" .. unitDefID .. ", name=" .. tostring(UnitDefs[unitDefID].translatedHumanName))
+--       debugger("teamID=" .. aTeamNum .. ", " .. searchTxt .. " unitID=" .. tostring(foundUnitID) .. ", defID=" .. unitDefID .. ", name=" .. tostring(UnitDefs[unitDefID].translatedHumanName)..", tableToString="..tableToString(unitDef))
 --     end
+--   end
+-- end
+-- for id,unitDef in pairs(UnitDefs) do
+--   for name,param in unitDef:pairs() do
+--     Spring.Echo(name,param)
 --   end
 -- end
 
