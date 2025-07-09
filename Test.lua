@@ -37,6 +37,8 @@ local trackAllEnemyUnitsRules = {} --
 local trackAllAlliedUnitsRules = {} -- 
 
 local UpdateInterval = 30 -- 30 runs once per second, 1=30/sec, 60=1/2sec
+local minReAlertSec = 3
+local lastAlertTime = 0
 
 -- Newly added event types will need to be added here
 local validEvents = {"created","finished","idle","damaged","taken","destroyed","los","enteredAir","stockpile","thresholdHP"}
@@ -135,19 +137,23 @@ local trackEnemyTypesRules = {
 	nuke = enemyNukeRules,
 	antinuke = enemyAntiNukeRules
 }
-local spectatorCommanderRules = {}
-local spectatorConstructorRules = {finished = {sharedAlerts=true, maxAlerts=2, reAlertSec=1, mark="Constructor Finished"}}
+local spectatorCommanderRules = {idle = {priority=2, maxAlerts=5, reAlertSec=5, alertDelay=.1, mark="Commander Idle", alertSound="sounds/commands/cmd-selfd.wav"}, thresholdHP = {maxAlerts=0, reAlertSec=60, mark="Danger!", alertSound="sounds/commands/cmd-selfd.wav", threshMinPerc=.5, priority=0}}
+local spectatorConstructorRules = {idle = {sharedAlerts=true, maxAlerts=2, reAlertSec=10, alertDelay=.1, mark="Constructor Idle"}, finished = {sharedAlerts=true, maxAlerts=2, reAlertSec=1, mark="Constructor Finished"}}
 local spectatorFactoryRules = {finished = {sharedAlerts=true, maxAlerts=2, reAlertSec=1, mark="Factory Finished"}}
-local spectatorFactoryT2Rules = {created = {sharedAlerts=true, maxAlerts=0, reAlertSec=1, mark="T2 Factory Started", alertSound="sounds/commands/cmd-selfd.wav"}}
-local spectatorFactoryT3Rules = {created = {sharedAlerts=true, maxAlerts=0, reAlertSec=1, mark="T3 Factory Started", alertSound="sounds/commands/cmd-selfd.wav"}}
-local spectatorRezBotRules = {Finished = {sharedAlerts=true, maxAlerts=2, reAlertSec=1, mark="RezBot Finished", alertSound="sounds/commands/cmd-selfd.wav"}}
+local spectatorFactoryT2Rules = {created = {sharedAlerts=true, maxAlerts=2, reAlertSec=1, mark="T2 Factory Started", alertSound="sounds/commands/cmd-selfd.wav"}}
+local spectatorFactoryT3Rules = {created = {sharedAlerts=true, maxAlerts=2, reAlertSec=1, mark="T3 Factory Started", alertSound="sounds/commands/cmd-selfd.wav"}}
+
+-- verify works
+local spectatorRezBotRules = {finished = {sharedAlerts=true, maxAlerts=2, reAlertSec=1, mark="RezBot Finished", alertSound="sounds/commands/cmd-selfd.wav"}}
 local spectatorMexRules = {destroyed = {sharedAlerts=true, maxAlerts=0, reAlertSec=30, mark="Mex Destroyed", alertSound=nil}}
-local spectatorEnergyGenRules = {finished = {sharedAlerts=true, maxAlerts=0, reAlertSec=1, mark="Energy Finished"}}
-local spectatorRadarRules = {finished = {sharedAlerts=true, maxAlerts=0, reAlertSec=1, mark="Radar Finished"}}
-local spectatorUnitsT2Rules = {finished = {sharedAlerts=true, maxAlerts=0, reAlertSec=1, mark="T2 Unit Finished"}}
-local spectatorUnitsT3Rules = {finished = {sharedAlerts=true, maxAlerts=0, reAlertSec=1, mark="T3 Unit Finished"}}
-local spectatorUnitsAirT1Rules = {finished = {sharedAlerts=true, maxAlerts=0, reAlertSec=1, mark="T1 Air Unit Finished"}}
-local spectatorUnitsAirT2Rules = {finished = {sharedAlerts=true, maxAlerts=0, reAlertSec=1, mark="T2 Air Finished"}}
+local spectatorMexT2Rules = {created = {sharedAlerts=true, maxAlerts=0, reAlertSec=30, mark="MexT2 Started", alertSound=nil}}
+local spectatorEnergyGenRules = {finished = {sharedAlerts=true, maxAlerts=4, reAlertSec=1, mark="Energy Finished"}}
+local spectatorEnergyGenT2Rules = {created = {sharedAlerts=true, maxAlerts=0, reAlertSec=1, mark="EnergyT2 Started"}}
+local spectatorRadarRules = {finished = {sharedAlerts=true, maxAlerts=2, reAlertSec=1, mark="Radar Finished"}}
+local spectatorUnitsT2Rules = {finished = {sharedAlerts=true, maxAlerts=2, reAlertSec=1, mark="T2 Unit Finished"}}
+local spectatorUnitsT3Rules = {finished = {sharedAlerts=true, maxAlerts=2, reAlertSec=1, mark="T3 Unit Finished"}}
+local spectatorUnitsAirT1Rules = {finished = {sharedAlerts=true, maxAlerts=2, reAlertSec=1, mark="T1 Air Unit Finished"}}
+local spectatorUnitsAirT2Rules = {finished = {sharedAlerts=true, maxAlerts=2, reAlertSec=1, mark="T2 Air Finished"}}
 local spectatorNukeRules = {created = {sharedAlerts=true, maxAlerts=0, reAlertSec=1, mark="Nuke Started", alertSound="sounds/commands/cmd-selfd.wav"}}
 local spectatorAntiNukeRules = {created = {sharedAlerts=true, maxAlerts=0, reAlertSec=1, mark="Antinuke Started", alertSound="sounds/commands/cmd-selfd.wav"}}
 -- local spectatorRules = {}
@@ -159,7 +165,9 @@ local trackSpectatorTypesRules = {
   factoryT3 = spectatorFactoryT3Rules,
   rezBot = spectatorRezBotRules,
 	mex = spectatorMexRules,
+	mexT2 = spectatorMexT2Rules,
 	energyGen = spectatorEnergyGenRules,
+	energyGenT2 = spectatorEnergyGenT2Rules,
 	radar = spectatorRadarRules,
 	unitsT2 = spectatorUnitsT2Rules,
 	unitsT3 = spectatorUnitsT3Rules,
@@ -212,7 +220,6 @@ local spGetUnitTeam = Spring.GetUnitTeam
 local spGetCommandQueue     = Spring.GetCommandQueue
 -- Deprecated: Getting the command count using GetUnitCommands/GetCommandQueue is deprecated. Please use Spring.GetUnitCommandCount instead.
 local spGetFactoryCommands = Spring.GetFactoryCommands -- TODO: Change to use Spring.GetFullBuildQueue(unitId) ? #########
-local spGetUnitHealth = Spring.GetUnitHealth
 
 local TestSound = 'sounds/commands/cmd-selfd.wav'
 
@@ -221,7 +228,7 @@ table.insert(validEventRules,"alertCount") -- add system only rules
 
 local myTeamID = Spring.GetMyTeamID()
 local myPlayerID = Spring.GetMyPlayerID()
-local isSpectator = Spring.GetSpectatingState()
+local isSpectator
 local warnFrame = 0
 
 local function debugger(...)
@@ -501,11 +508,11 @@ pArmyManager.isGaia = nil
 pArmyManager.debug = false  -- ############################ArmyManager debug mode enable################################################
 
 -- TODO: remove old manual type logic below after verifying the new methods
-pArmyManager.builders = {} -- builders key/value. Added with armyManager.Builders[unitID] = [unitObject]
-pArmyManager.commanders = {} -- commanders key/value. Added with armyManager.Commanders[unitID] = [unitObject]
-pArmyManager.constructors = {} -- constructors key/value. Added with armyManager.Constructors[unitID] = [unitObject]
-pArmyManager.factories = {} -- factories key/value. Added with armyManager.Factories[unitID] = [unitObject]
-pArmyManager.rezbots = {} -- rezbots key/value. Added with armyManager.rezbots[unitID] = [unitObject]
+-- pArmyManager.builders = {} -- builders key/value. Added with armyManager.Builders[unitID] = [unitObject]
+-- pArmyManager.commanders = {} -- commanders key/value. Added with armyManager.Commanders[unitID] = [unitObject]
+-- pArmyManager.constructors = {} -- constructors key/value. Added with armyManager.Constructors[unitID] = [unitObject]
+-- pArmyManager.factories = {} -- factories key/value. Added with armyManager.Factories[unitID] = [unitObject]
+-- pArmyManager.rezbots = {} -- rezbots key/value. Added with armyManager.rezbots[unitID] = [unitObject]
 
 
 local pUnit = protoObject:clone()
@@ -517,19 +524,20 @@ pUnit.defID = nil -- unitDefID
 pUnit.isIdle = false -- Use the get/set-methods instead.
 pUnit.lastSetIdle = nil -- uses GetGameFrame()
 pUnit.created = nil -- gameSecs
-pUnit.coords = nil
+pUnit.coords = {}
 pUnit.lost = nil -- gameSecs
 pUnit.isLost = false
 pUnit.lastUpdate = nil -- Game seconds last update time of the unit (NOT used YET)
-pUnit.health = nil -- health of the unit (NOT IMPLEMENTED YET)
+pUnit.typeRules = {}
+pUnit.health = {} -- health of the unit (NOT IMPLEMENTED YET)
 pUnit.debug = false  -- ############################Prototype Unit debug mode enable################################################
 
 
-pUnit.isBuilder = nil -- is this unit a builder?
-pUnit.isCommander = nil -- is this unit a commander?
-pUnit.isConstructor = nil -- is this unit a constructor?
-pUnit.isFactory = nil -- is this unit a factory?
-pUnit.isRezBot = nil -- is this unit a rezbot?
+-- pUnit.isBuilder = nil -- is this unit a builder?
+-- pUnit.isCommander = nil -- is this unit a commander?
+-- pUnit.isConstructor = nil -- is this unit a constructor?
+-- pUnit.isFactory = nil -- is this unit a factory?
+-- pUnit.isRezBot = nil -- is this unit a rezbot?
 
 
 
@@ -936,11 +944,13 @@ function teamsManager:alert(unitObj, alertVarsTbl) -- nil input alerts from aler
     if debug or self.debug then debugger("alert 5. About to play alertSound. unitObj.ID="..tostring(unitObj.ID)..", alertVarsTbl=" .. type(alertVarsTbl)) end
     alertSound(alertVarsTbl["alertSound"])
     success = true
+    lastAlertTime = Spring.GetGameSeconds()
   end
   if type(alertVarsTbl["messageTxt"]) == "string" and type(alertVarsTbl["messageTo"]) == "string" then
     if debug or self.debug then debugger("alert 6. Going to alertMessage. unitObj.ID="..tostring(unitObj.ID)..", alertVarsTbl=" .. type(alertVarsTbl)) end
     alertMessage(alertVarsTbl["messageTxt"], alertVarsTbl["messageTo"])
     success = true
+    lastAlertTime = Spring.GetGameSeconds()
   end
   if type(unitObj) == "table" and type(unitObj.ID) == "number" and type(alertVarsTbl) == "table" then
     if debug or self.debug then debugger("alert 7. Starting mark/ping part. unitObj.ID="..tostring(unitObj.ID)..", alertVarsTbl=" .. type(alertVarsTbl)) end
@@ -977,6 +987,7 @@ function teamsManager:alert(unitObj, alertVarsTbl) -- nil input alerts from aler
     local gameSec = Spring.GetGameSeconds()
     alertBaseObj["lastNotify"] = gameSec
     alertBaseObj["alertCount"] = (alertBaseObj["alertCount"] + 1)
+    lastAlertTime = Spring.GetGameSeconds()
   end
   if debug or self.debug then debugger("alert 10. was="..tostring(success)..", unitObj.ID="..tostring(unitObj.ID)..", alertVarsTbl=" .. type(alertVarsTbl)) end
   return success
@@ -1138,6 +1149,10 @@ end
 -- add minTimeBetweenAlerts in here
 function teamsManager:getNextQueuedAlert()
   if debug then debugger("getNextQueuedAlert 1. queueSize="..tostring(alertQueue:getSize())) end
+  if Spring.GetGameSeconds() < lastAlertTime + minReAlertSec then
+    if debug then debugger("getNextQueuedAlert 1.1. Too soon due to minReAlertSec="..tostring(minReAlertSec)..", remainingSecs="..lastAlertTime + minReAlertSec - Spring.GetGameSeconds()) end
+    return nil
+  end
   local validFound = false
   local unitObj, alertVarsTbl, priority, queuedSec
   local gameSecs = Spring.GetGameSeconds()
@@ -1416,20 +1431,25 @@ function pArmyManager:getOrCreateUnit(unitID, defID)
   return self:getUnit(unitID) or self:createUnit(unitID, defID)
 end
 
-function pArmyManager:getTypesRulesForEvent(defID, event, topPriorityOnly, canAlertNow, unitObj) -- defID, string event, bool/nil (default false) topPriorityOnly. Returns 0 to many types with ONLY their MATCHING EVENTS: {type1 = {event = {rules}}, type2 = {event = {rules}}}
-  if debug or self.debug then debugger("getTypesRulesForEvent 1. teamID=" ..tostring(self.teamID).. ", defID=" .. tostring(defID) .. ", event=" .. tostring(event) .. ", topPriorityOnly=" .. tostring(topPriorityOnly).. ", canAlertNow="..tostring(canAlertNow).. ", unitObj="..type(unitObj)) end
-  if type(defID) ~= "number" or type(event) ~= "string" or (type(topPriorityOnly) ~= "boolean" and topPriorityOnly ~= nil) or (unitObj ~= nil and type(unitObj) ~= "table") or (canAlertNow and type(unitObj) ~= "table") then
-    debugger("getTypesRulesForEvent 2. ERROR. defID NOT number, event not string, not unitObj with canAlertNow. teamID=" ..tostring(self.teamID).. ", defID=" .. tostring(defID) .. ", event=" .. tostring(event))
+function pArmyManager:getTypesRulesForEvent(defIDOrTypeRules, event, topPriorityOnly, canAlertNow, unitObj) -- mandatory defID | unit["typeRules"], string event, bool/nil (default false) topPriorityOnly. Returns 0 to many types with ONLY their MATCHING EVENTS: {type1 = {event = {rules}}, type2 = {event = {rules}}}
+  if debug or self.debug then debugger("getTypesRulesForEvent 1. teamID=" ..tostring(self.teamID).. ", defID=" .. tostring(defIDOrTypeRules) .. ", event=" .. tostring(event) .. ", topPriorityOnly=" .. tostring(topPriorityOnly).. ", canAlertNow="..tostring(canAlertNow).. ", unitObj="..type(unitObj)) end
+  if type(event) ~= "string" or (type(topPriorityOnly) ~= "boolean" and topPriorityOnly ~= nil) or (unitObj ~= nil and type(unitObj) ~= "table") or (canAlertNow and type(unitObj) ~= "table") then
+    debugger("getTypesRulesForEvent 2. ERROR. event not string, not unitObj with canAlertNow. teamID=" ..tostring(self.teamID).. ", defID=" .. tostring(defIDOrTypeRules) .. ", event=" .. tostring(event))
     return nil
   end
   local typesEventRulesTbl
-  if not isSpectator then
-  typesEventRulesTbl = self.defTypesEventsRules[defID] -- {defID = {type = {event = {rules}}}}
+  if type(defIDOrTypeRules) == "table" and next(defIDOrTypeRules) ~= nil then
+    typesEventRulesTbl = defIDOrTypeRules
+  elseif type(defIDOrTypeRules) == "number" then
+    if not isSpectator then
+      typesEventRulesTbl = self.defTypesEventsRules[defIDOrTypeRules] -- {defID = {type = {event = {rules}}}}
+      if debug or self.debug then debugger("getTypesRulesForEvent 3. Is Player.") end
+    else
+      if debug or self.debug then debugger("getTypesRulesForEvent 3. isSpectator.") end
+      typesEventRulesTbl = teamsManager.defTypesEventsRules[defIDOrTypeRules] -- {defID = {type = {event = {rules}}}}
+    end
   else
-  typesEventRulesTbl = teamsManager.defTypesEventsRules[defID] -- {defID = {type = {event = {rules}}}}
-  end
-  if typesEventRulesTbl == nil or type(typesEventRulesTbl) ~= "table" then
-    if debug or self.debug then debugger("getTypesRulesForEvent 3. No types for deID, or typesEventRules NOT table. Returning nil. defID"..tostring(defID) .. ", event=" .. tostring(event)..", teamID=" ..tostring(self.teamID).. ", typesEventRulesTbl=" .. type(typesEventRulesTbl) .. ", translatedHumanName=" .. tostring(UnitDefs[defID].translatedHumanName)) end
+    debugger("getTypesRulesForEvent 3. ERROR. defIDOrTypeRules not table or number defID="..tostring(defIDOrTypeRules)..", aType="..tostring(aType)..", event=".. tostring(event) .. ",typeRulesTbl="..type(typesEventRulesTbl) .. ", teamID=".. tostring(self.teamID))
     return nil
   end
   local typesEventsTbl = {}
@@ -1453,7 +1473,7 @@ function pArmyManager:getTypesRulesForEvent(defID, event, topPriorityOnly, canAl
     end
   end
   if matches == 0 then
-    if debug then debugger("getTypesRulesForEvent 6. No matches, returning nil. event=" .. tostring(event) .. ", typesEventRules=" .. tableToString(typesEventsTbl)) end
+    if debug then debugger("getTypesRulesForEvent 6. No matches, returning nil. event=" .. tostring(event)) end
     return nil
   end
   if debug then debugger("getTypesRulesForEvent 7. Returning matches=" .. tostring(matches) .. ", event=" .. tostring(event) .. ", typesEventRules=" .. type(typesEventsTbl)) end
@@ -1493,77 +1513,54 @@ function pArmyManager:canAlertNow(unitObj, typeEventRulesTbl) -- only has 1 Type
     -- end
   end
   if ((type(aRulesTbl["mark"]) ~= "string") and (type(aRulesTbl["ping"]) ~= "string") and type(aRulesTbl["alertSound"]) ~= "string") or alertBaseObj["isQueued"] or gameSecs < alertBaseObj["lastNotify"] + aRulesTbl["reAlertSec"] or (aRulesTbl["maxAlerts"] ~= 0 and alertBaseObj["alertCount"] >= aRulesTbl["maxAlerts"]) then
-    if debug then debugger("canAlertNow 7. Too soon or no alert rules. isQueued="..tostring(alertBaseObj["isQueued"])..", timing=" .. tostring(gameSecs) .. " < " .. tostring(alertBaseObj["lastNotify"] + aRulesTbl["reAlertSec"]) .. ", or reached maxAlerts=" .. tostring(alertBaseObj["alertCount"]) .. "/" .. tostring(aRulesTbl["maxAlerts"])..", mark="..tostring(aRulesTbl["mark"])..", ping="..tostring(aRulesTbl["ping"])..", alertSound="..tostring(aRulesTbl["alertSound"]) .. ", tableToString=" .. tableToString(aRulesTbl)) end
+    if debug then debugger("canAlertNow 7. Too soon or no alert rules. isQueued="..tostring(alertBaseObj["isQueued"])..", timing=" .. tostring(gameSecs) .. " < " .. tostring(alertBaseObj["lastNotify"] + aRulesTbl["reAlertSec"]) .. ", or reached maxAlerts=" .. tostring(alertBaseObj["alertCount"]) .. "/" .. tostring(aRulesTbl["maxAlerts"])..", mark="..tostring(aRulesTbl["mark"])..", ping="..tostring(aRulesTbl["ping"])..", alertSound="..tostring(aRulesTbl["alertSound"])) end --  .. ", tableToString=" .. tableToString(aRulesTbl)
     return false
   end
   if debug or self.debug then debugger("canAlertNow 8. TRUE. unitObj=".. type(unitObj)..", typeEventRulesTbl="..type(typeEventRulesTbl)) end
   return true
 end
 
-function pArmyManager:hasTypeEventRules(defID, aType, event) -- defID mandatory
-  if not teamsManager:validIDs(nil, nil, true, defID, nil, nil, nil, nil, nil, nil) then debugger("pArmyManager:hasTypeEventRules 0. INVALID input. Returning nil.") return nil end
-  if debug or self.debug then debugger("pArmyManager:hasTypeEventRules 1. defID=".. tostring(defID)..", aType="..tostring(aType)..", event=".. tostring(event) .. ", teamID=".. tostring(self.teamID) .. ", translatedHumanName=" .. tostring(UnitDefs[defID].translatedHumanName)) end
+function pArmyManager:hasTypeEventRules(defIDOrTypeRules, aType, event) -- mandatory defID | unit["typeRules"]
+  if debug or self.debug then debugger("hasTypeEventRules 1. defID=".. tostring(defIDOrTypeRules)..", aType="..tostring(aType)..", event=".. tostring(event) .. ", teamID=".. tostring(self.teamID)) end
   local typeRulesTbl
-  if not isSpectator then
-    typeRulesTbl = self.defTypesEventsRules[defID] -- {defID = {type = {event = {rules}}}}
+  if type(defIDOrTypeRules) == "table" and next(defIDOrTypeRules) ~= nil then
+    typeRulesTbl = defIDOrTypeRules
+  elseif type(defIDOrTypeRules) == "number" then
+    if not isSpectator then
+      typeRulesTbl = self.defTypesEventsRules[defIDOrTypeRules] -- {defID = {type = {event = {rules}}}}
+      if debug or self.debug then debugger("hasTypeEventRules 2. Is Player.") end
+    else
+      if debug or self.debug then debugger("hasTypeEventRules 3. isSpectator.") end
+      typeRulesTbl = teamsManager.defTypesEventsRules[defIDOrTypeRules] -- {defID = {type = {event = {rules}}}}
+    end
   else
-    typeRulesTbl = teamsManager.defTypesEventsRules[defID] -- {defID = {type = {event = {rules}}}}
-    if debug or self.debug then debugger("pArmyManager:hasTypeEventRules 1.1. FALSE. Not table defID="..tostring(defID)..", aType="..tostring(aType)..", event=".. tostring(event) .. ",typeRulesTbl="..type(typeRulesTbl) .. ", teamID=".. tostring(self.teamID)) end
-  end
-  if type(typeRulesTbl) ~= "table" then
-    if debug or self.debug then debugger("pArmyManager:hasTypeEventRules 2. FALSE. Not table defID="..tostring(defID)..", aType="..tostring(aType)..", event=".. tostring(event) .. ",typeRulesTbl="..type(typeRulesTbl) .. ", teamID=".. tostring(self.teamID)) end
+    if debug or self.debug then debugger("hasTypeEventRules 4. ERROR. defIDOrTypeRules not table or number defID="..tostring(defIDOrTypeRules)..", aType="..tostring(aType)..", event=".. tostring(event) .. ",typeRulesTbl="..type(typeRulesTbl) .. ", teamID=".. tostring(self.teamID)) end
     return false
   end
-  if defID and not aType and not event then
-    if debug or self.debug then debugger("pArmyManager:hasTypeEventRules 3. TRUE. Found requested defID="..tostring(defID)..", aType="..tostring(aType)..", event=".. tostring(event) .. ", teamID=".. tostring(self.teamID) .. ", translatedHumanName=" .. tostring(UnitDefs[defID].translatedHumanName)) end
+  if type(typeRulesTbl) ~= "table" then
+    if debug or self.debug then debugger("hasTypeEventRules 5. FALSE. Not table defID="..tostring(defIDOrTypeRules)..", aType="..tostring(aType)..", event=".. tostring(event) .. ",typeRulesTbl="..type(typeRulesTbl) .. ", teamID=".. tostring(self.teamID)) end
+    return false
+  end
+  if defIDOrTypeRules and not aType and not event then
+    if debug or self.debug then debugger("hasTypeEventRules 6. TRUE. Found requested defID="..tostring(defIDOrTypeRules)..", aType="..tostring(aType)..", event=".. tostring(event) .. ", teamID=".. tostring(self.teamID)) end
     return true
   end
   for kType,evntTbl in pairs(typeRulesTbl) do
     if aType and kType == aType and event and type(evntTbl[event]) == "table" then
-      if debug or self.debug then debugger("pArmyManager:hasTypeEventRules 4. TRUE. Found type and event. defID="..tostring(defID)..", aType="..tostring(aType)..", event=".. tostring(event) .. ", teamID=".. tostring(self.teamID) .. ", translatedHumanName=" .. tostring(UnitDefs[defID].translatedHumanName)) end
+      if debug or self.debug then debugger("hasTypeEventRules 7. TRUE. Found type and event. defID="..tostring(defIDOrTypeRules)..", aType="..tostring(aType)..", event=".. tostring(event) .. ", teamID=".. tostring(self.teamID)) end
       return true
     elseif not event and aType and kType == aType and type(evntTbl) == "table" then
-      if debug or self.debug then debugger("pArmyManager:hasTypeEventRules 5. TRUE. Found type. defID="..tostring(defID)..", aType="..tostring(aType)..", event=".. tostring(event) .. ", teamID=".. tostring(self.teamID) .. ", translatedHumanName=" .. tostring(UnitDefs[defID].translatedHumanName)) end
+      if debug or self.debug then debugger("hasTypeEventRules 8. TRUE. Found type. defID="..tostring(defIDOrTypeRules)..", aType="..tostring(aType)..", event=".. tostring(event) .. ", teamID=".. tostring(self.teamID)) end
       return true
     elseif not aType and event and type(evntTbl[event]) == "table" then
-      if debug or self.debug then debugger("pArmyManager:hasTypeEventRules 6. TRUE. Found event. defID="..tostring(defID)..", aType="..tostring(aType)..", event=".. tostring(event) .. ", teamID=".. tostring(self.teamID) .. ", translatedHumanName=" .. tostring(UnitDefs[defID].translatedHumanName)) end
+      if debug or self.debug then debugger("hasTypeEventRules 9. TRUE. Found event. defID="..tostring(defIDOrTypeRules)..", aType="..tostring(aType)..", event=".. tostring(event) .. ", teamID=".. tostring(self.teamID)) end
       return true
     end
   end
-  if debug or self.debug then debugger("pArmyManager:hasTypeEventRules 7. FALSE. Couldn't find type and/or event. defID="..tostring(defID)..", aType="..tostring(aType)..", event=".. tostring(event) .. ", teamID=".. tostring(self.teamID) .. ", translatedHumanName=" .. tostring(UnitDefs[defID].translatedHumanName)) end
+  if debug or self.debug then debugger("hasTypeEventRules 10. FALSE. Couldn't find type and/or event. defID="..tostring(defIDOrTypeRules)..", aType="..tostring(aType)..", event=".. tostring(event) .. ", teamID=".. tostring(self.teamID)) end
   return false
 end
 
--- Could have this run once when adding to defsTypesEventsRulesTbl
-function pArmyManager:initEventLastAlerts(unitObj, unitType, event) -- armyObj for sharedEvent, else unitObj. Nil defaults to armyObj
-  if debug then debugger("pArmyManager:initEventLastAlerts 1. unitOrArmyObj="..type(unitObj)..", unitType="..tostring(unitType)..", event="..tostring(event)) end
-  if type(unitObj) ~= "table" or (unitObj.parent ~= self and unitObj.parent ~= self.parent) or type(unitType) ~= "string" or type(event) ~= "string" then
-    debugger("pArmyManager:initEventLastAlerts 2. ERROR, Returning nil. BAD event, unitType, or unitOrArmyObj=".. type(unitObj) .. ", unitType=".. tostring(unitType) .. ", event=" .. tostring(event))
-    return nil
-  end
-  -- if type(unitObj["lastAlerts"]) ~= "table" then
-  --   if debug then debugger("pArmyManager:initEventLastAlerts 3. lastAlerts="..type(unitObj["lastAlerts"])..", unitOrArmyObj="..type(unitObj)..", unitType="..tostring(unitType)..", event="..tostring(event))end
-  --     unitObj["lastAlerts"] = {}
-  --   end
-  --   unitObj = unitObj["lastAlerts"]
-  --   if type(unitObj[unitType]) ~= "table" then
-  --     if debug then debugger("pArmyManager:initEventLastAlerts 4. unitOrArmyObj[unitType]="..type(unitObj[unitType])..", unitOrArmyObj="..type(unitObj)..", unitType="..tostring(unitType)..", event="..tostring(event))end
-  --     unitObj[unitType] = {}
-  --   end
-  --   if type(unitObj[unitType][event]) ~= "table" then
-  --     if debug then debugger("pArmyManager:initEventLastAlerts 5. unitOrArmyObj[unitType][event]="..type(unitObj[unitType][event])..", unitOrArmyObj="..type(unitObj)..", unitType="..tostring(unitType)..", event="..tostring(event)) end
-  --     unitObj[unitType][event] = {}
-  --     unitObj[unitType][event]["lastNotify"] = 0
-  --     unitObj[unitType][event]["alertCount"] = 0
-  --     unitObj[unitType][event]["isQueued"] = false
-  --   end
-return true
-  -- debugger("pArmyManager:initEventLastAlerts 3. THIS ISN'T USE ANYMORE.")  
-  -- -- end
-  -- -- debug = false
-  -- if debug then debugger("pArmyManager:initEventLastAlerts 5. lastAlerts="..type(unitObj["lastAlerts"])..", unitOrArmyObj[unitType]="..type(unitObj[unitType])..", unitOrArmyObj[unitType][event]="..type(unitObj[unitType][event])..", unitOrArmyObj="..type(unitObj)..", unitType="..tostring(unitType)..", event="..tostring(event)..", lastNotify="..tostring(unitObj[unitType][event]["lastNotify"])..", alertCount="..tostring(unitObj[unitType][event]["alertCount"])..", isQueued="..tostring(unitObj[unitType][event]["isQueued"])) end
-  -- return true
-end
 -- ################################################## Custom/Expanded ArmyManager methods start here #################################################
 
 
@@ -1608,10 +1605,10 @@ function pUnit:setIdle()
   if debug or self.debug then debugger("setIdle 1. GameFrame(" .. tostring(Spring.GetGameFrame()) .. ")-LastIdle(" .. tostring(self.lastSetIdle) .. ")=" .. tostring(Spring.GetGameFrame() - self.lastSetIdle) .. ", isIdle=" .. tostring(self.isIdle) .. ", ID=" .. tostring(self.ID) .. ", defID=".. tostring(self.defID) .. ", teamID=".. tostring(self.parent.teamID)) end
   if not self.isIdle then
     self.isIdle = true
-    if self:hasTypeEventRules(nil, "idle") then
-      if type(self.parent["idle"]) ~= "table" then
-        self.parent["idle"] = {}
-      end
+    if self:hasTypeEventRules(nil, "idle") then -- could commit this stuff to unit for efficiency
+      -- if type(self.parent["idle"]) ~= "table" then
+      --   self.parent["idle"] = {}
+      -- end
       -- if type(self.parent["idle"]) == "table" and self.parent["idle"][self.ID] == nil then
         self.parent["idle"][self.ID] = self
       -- end
@@ -1631,35 +1628,51 @@ function pUnit:setNotIdle()
   if debug or self.debug then debugger("setNotIdle 1. isIdle=" .. tostring(self.isIdle) .. ", ID=" .. tostring(self.ID) .. ", defID=".. tostring(self.defID) .. ", teamID=".. tostring(self.parent.teamID)) end
   if self.isIdle then
     self.isIdle = false
-    if type(self.parent["idle"]) ~= "table" and self:hasTypeEventRules(nil, "idle") then
-      self.parent["idle"] = {}
-    end
-    -- if type(self.parent["idle"]) == "table" and self.parent["idle"][self.ID] ~= nil then
-      self.parent["idle"][self.ID] = nil
+    -- if self:hasTypeEventRules(nil, "idle") then -- could commit this stuff to unit for efficiency
+      -- if type(self.parent["idle"]) ~= "table" then
+      --   self.parent["idle"] = {}
+      -- end
+      -- if self.parent["idle"][self.ID] ~= nil then
+        self.parent["idle"][self.ID] = nil
+      -- end
     -- end
     self.lastUpdate = Spring.GetGameSeconds()
     if debug or self.debug then debugger("setNotIdle 2. Has been setNotIdle. isIdle=" .. tostring(self.isIdle) .. ", ID=" .. tostring(self.ID) .. ", defID=".. tostring(self.defID) .. ", teamID=".. tostring(self.parent.teamID)) end
   end
 end
--- ATTENTION!!! ###### This waits 5 frames before returning that it is idle because some units are idle very briefly before starting on the next queued task
+-- ATTENTION!!! ###### Use "alertDelay" with the "idle" event to prevent false positives.
 function pUnit:getIdle()
   if debug or self.debug then debugger("getIdle 1. isIdle=" .. tostring(self.isIdle) .. ", ID=" .. tostring(self.ID) .. ", defID=".. tostring(self.defID) .. ", teamID=".. tostring(self.parent.teamID) .. ", isFactory=" .. tostring(self.isFactory) .. ", translatedHumanName=" .. tostring(UnitDefs[self.defID].translatedHumanName)) end
-  local health, maxHealth, paralyzeDamage, captureProgress, buildProgress = Spring.GetUnitHealth(self.ID) -- return: nil | number health, number maxHealth, number paralyzeDamage, number captureProgress, number buildProgress -- -- threshMinPerc=.5
-  if buildProgress == nil or buildProgress < 1 then
-    if debug or self.debug then debugger("getIdle 2. Not fully constructed, so returning NOT IDLE. isIdle=" .. tostring(self.isIdle) .. ", ID=" .. tostring(self.ID) .. ", defID=".. tostring(self.defID) .. ", teamID=".. tostring(self.parent.teamID)) end
-    self:setNotIdle()
-    return self.isIdle
+  if not self.isCompleted then
+    local _, _, _, _, buildProgress = self:getHealth() -- return: nil | number health, number maxHealth, number paralyzeDamage, number captureProgress, number buildProgress -- -- threshMinPerc=.5
+    if buildProgress == nil or buildProgress < 1 then
+      if debug or self.debug then debugger("getIdle 2. Not fully constructed, so returning NOT IDLE. isIdle=" .. tostring(self.isIdle) .. ", ID=" .. tostring(self.ID) .. ", defID=".. tostring(self.defID) .. ", teamID=".. tostring(self.parent.teamID)) end
+      self:setNotIdle()
+      return self.isIdle
+    end
   end
-  local count
+  local count = 0
   if self.isFactory then
     count = Spring.GetFactoryCommands(self.ID, 0) -- GetFactoryCommands(unitID, 0)
     if debug or self.debug then debugger("getIdle 3. isFactory with count=" .. tostring(count) .. ". isIdle=" .. tostring(self.isIdle) .. ", ID=" .. tostring(self.ID) .. ", defID=".. tostring(self.defID) .. ", teamID=".. tostring(self.parent.teamID)) end
+    if count == nil then
+      if true or self.debug then debugger("getIdle 3.1. count is nil for factory. isIdle=" .. tostring(self.isIdle) .. ", ID=" .. tostring(self.ID) .. ", defID=".. tostring(self.defID) .. ", teamID=".. tostring(self.parent.teamID) .. ", isFactory=" .. tostring(self.isFactory) .. ", translatedHumanName=" .. tostring(UnitDefs[self.defID].translatedHumanName)) end
+      count = 0
+    end
   else
     count = spGetCommandQueue(self.ID, 0)
     -- Deprecated: Getting the command count using GetUnitCommands/GetCommandQueue is deprecated. Please use Spring.GetUnitCommandCount instead.
     if debug or self.debug then debugger("getIdle 4. Builder with count=" .. tostring(count) .. ". isIdle=" .. tostring(self.isIdle) .. ", ID=" .. tostring(self.ID) .. ", defID=".. tostring(self.defID) .. ", teamID=".. tostring(self.parent.teamID)) end
+    if count == nil then
+      if debug or self.debug then debugger("getIdle 4.1. count is nil. This can happen when the commander is dead. isIdle=" .. tostring(self.isIdle) .. ", ID=" .. tostring(self.ID) .. ", defID=".. tostring(self.defID) .. ", teamID=".. tostring(self.parent.teamID) .. ", isFactory=" .. tostring(self.isFactory) .. ", translatedHumanName=" .. tostring(UnitDefs[self.defID].translatedHumanName)) end
+      count = 1
+    end
   end
   if debug or self.debug then debugger("getIdle 5. GameFrame(" .. tostring(Spring.GetGameFrame()) .. ", CommandQueueCount=" .. tostring(count) .. ")-LastIdle(" .. tostring(self.lastSetIdle) .. ")=" .. tostring(Spring.GetGameFrame() - self.lastSetIdle) .. ", isIdle=" .. tostring(self.isIdle) .. ", ID=" .. tostring(self.ID) .. ", defID=".. tostring(self.defID) .. ", teamID=".. tostring(self.parent.teamID)) end
+  if count == nil then
+    if debug or self.debug then debugger("getIdle 4.1. isIdle=" .. tostring(self.isIdle) .. ", ID=" .. tostring(self.ID) .. ", defID=".. tostring(self.defID) .. ", teamID=".. tostring(self.parent.teamID) .. ", isFactory=" .. tostring(self.isFactory) .. ", translatedHumanName=" .. tostring(UnitDefs[self.defID].translatedHumanName)) end
+    count = 0
+  end
   if count > 0 then
     if debug or self.debug then debugger("getIdle 6. Wasn't actually Idle. Calling setNotIdle to correct it. cmdQueue=" .. tostring(count) .. ", GameFrame-LastIdle=" .. tostring(Spring.GetGameFrame() - self.lastSetIdle) .. ", isIdle=" .. tostring(self.isIdle) .. ",ID=" .. tostring(self.ID) .. ", defID=".. tostring(self.defID) .. ", teamID=".. tostring(self.parent.teamID)) end
     self:setNotIdle()
@@ -1667,15 +1680,14 @@ function pUnit:getIdle()
   elseif self.isIdle == false then
     self:setIdle()  -- lastSetIdle is only set when becoming idle from being not idle. Which means it will return false below to allow the extra second to prevent false positives
     if debug or self.debug then debugger("getIdle 7. Was actually Idle, corrected. cmdQueue=" .. tostring(count) .. ", GameFrame-LastIdle=" .. tostring(Spring.GetGameFrame() - self.lastSetIdle) .. ", isIdle=" .. tostring(self.isIdle) .. ",ID=" .. tostring(self.ID) .. ", defID=".. tostring(self.defID) .. ", teamID=".. tostring(self.parent.teamID)) end
+  elseif self:hasTypeEventRules(nil, "idle") then
+    local typeRules = self:getTypesRulesForEvent("idle", true, true)
+    if typeRules then
+      if debug or self.debug then debugger("setIdle 2. Going to addUnitToAlertQueue. GameFrame(" .. tostring(Spring.GetGameFrame()) .. ")-LastIdle(" .. tostring(self.lastSetIdle) .. ")=" .. tostring(Spring.GetGameFrame() - self.lastSetIdle) .. ", isIdle=" .. tostring(self.isIdle) .. ", ID=" .. tostring(self.ID) .. ", defID=".. tostring(self.defID) .. ", teamID=".. tostring(self.parent.teamID)) end
+      teamsManager:addUnitToAlertQueue(self, typeRules) -- addUnitToAlertQueue(self, typeRules)
+    end
   end
   return self.isIdle
-  -- if self.isIdle and Spring.GetGameFrame() < self.lastSetIdle + 5 then -- because it may be idle very briefly before starting on the next queued task
-  --   if debug or self.debug then debugger("getIdle 8. Hasn't been idle for a second. Returning false. cmdQueue=" .. tostring(count) .. ", GameFrame-LastIdle=" .. tostring(Spring.GetGameFrame() - self.lastSetIdle) .. ", isIdle=" .. tostring(self.isIdle) .. ",ID=" .. tostring(self.ID) .. ", defID=".. tostring(self.defID) .. ", teamID=".. tostring(self.parent.teamID)) end
-  --   return nil -- So that you can know if waiting for time to pass
-  -- else
-  -- if debug or self.debug then debugger("getIdle 9. Returning " .. tostring(self.isIdle) .. ". cmdQueue=" .. tostring(count) .. ", GameFrame-LastIdle=" .. tostring(Spring.GetGameFrame() - self.lastSetIdle) .. ", isIdle=" .. tostring(self.isIdle) .. ",ID=" .. tostring(self.ID) .. ", defID=".. tostring(self.defID) .. ", teamID=".. tostring(self.parent.teamID)) end
-  -- return true -- doing it this way because for some reason then function receiving self.isIdle gets nil every time?
-  -- end
 end
 
 -- TODO: Update to use relevant table. Think I did, but need to remove old
@@ -1684,18 +1696,17 @@ function pUnit:setLost(destroyed) -- destroyed = true default
   if type(destroyed) ~= "nil" and type(destroyed) ~= "boolean" then
     debugger("setLost 2. ERROR. destroyed NOT nil or bool. ID=" .. tostring(self.ID) .. ", defID=".. tostring(self.defID) .. ", teamID=".. tostring(self.parent.teamID) .. ", destroyed=" .. tostring(destroyed))
   end
-  local x,y,z = self:getCoords()
-  if x then
-    self.coords = {x=x, y=y, z=z}
+  self:getCoords() -- Must do this immediately before the unit is removed from the game
+  if destroyed == nil then
+    destroyed = true
   end
-  destroyed = destroyed or true
   self:setNotIdle() -- Removes it from idle lists/queues
   if type(self.parent["unitsLost"]) ~= "table" then
     self.parent["unitsLost"] = {}
   end
   self.parent["unitsLost"][self.ID] = self
   self.parent.units[self.ID] = nil
-  local unitTypes = self:getTypesRules() -- {type = {event = {rules}}}} -- Remove unit from all Type/Event lists in parent army (except Lost)
+  local unitTypes = self["typeRules"] -- {type = {event = {rules}}}} -- Remove unit from all Type/Event lists in parent army (except Lost)
   if debug or self.debug then debugger("setLost 4. About to try removing unit from all Type/Event lists in parent army (except Lost). translatedHumanName=" .. tostring(UnitDefs[self.defID].translatedHumanName) .. ", type(unitTypes)=".. type(unitTypes)) end
   if type(unitTypes) == "table" then
     for aType, eventTbl in pairs(unitTypes) do
@@ -1732,96 +1743,78 @@ function pUnit:setLost(destroyed) -- destroyed = true default
   return self
 end
 
+-- Unnecessary method
 function pUnit:getTypesRules(types) -- Nil for all, string for one, or array of strings input. Should not store in unit, since it can move between teams. The armyManagers define which units are important to track.
   if debug or self.debug then debugger("getTypesRules 1. ID=" .. tostring(self.ID) .. ", defID=".. tostring(self.defID) .. ", teamID=".. tostring(self.parent.teamID) .. ", types=" .. tostring(types) .. ", translatedHumanName=" ..tostring(UnitDefs[self.defID].translatedHumanName)) end
-  if self:hasTypeEventRules() == false then 
-    if debug or self.debug then debugger("getTypesRules 2. Unit has no typeRules in defTypesEventsRules. returning nil. ID=" .. tostring(self.ID) .. ", defID=".. tostring(self.defID) .. ", teamID=".. tostring(self.parent.teamID) .. ", types=" .. tostring(types)) end
-    return nil
-  end
-  local typeRulesTbl
-  if not isSpectator then
-    typeRulesTbl = self.parent.defTypesEventsRules[self.defID] -- {defID = {type = {event = {rules}}}}
-  else
-    typeRulesTbl = teamsManager.defTypesEventsRules[self.defID] -- {defID = {type = {event = {rules}}}}
-  end
-  if types == nil then
-    if debug or self.debug then debugger("getTypesRules 3. Nil means returning all typesRules. ID=" .. tostring(self.ID) .. ", defID=".. tostring(self.defID) .. ", teamID=".. tostring(self.parent.teamID) .. ", types=" .. tostring(types)) end
-    return typeRulesTbl -- {defID = {type = {event = {rules}}}}
-  elseif type(types) == "string" then
-    if debug or self.debug then debugger("getTypesRules 4. Returning matching typeRules, if there. ID=" .. tostring(self.ID) .. ", defID=".. tostring(self.defID) .. ", teamID=".. tostring(self.parent.teamID) .. ", types=" .. tostring(types)) end
-    return {[types] = typeRulesTbl[types]}
-  elseif type(types) == "table" then
-    local typeTble = {}
-    for i, aType in ipairs(types) do
-      if type(typeRulesTbl[aType]) == "table" then
-        if debug or self.debug then debugger("getTypesRules 5. Match found in loop, adding it. ID=" .. tostring(self.ID) .. ", defID=".. tostring(self.defID) .. ", teamID=".. tostring(self.parent.teamID) .. ", types=" .. tostring(types)) end
-        typeTble[aType] = typeRulesTbl[aType]
-      end
-    end
-    if debug or self.debug then debugger("getTypesRules 6. returning all matching typesRules. ID=" .. tostring(self.ID) .. ", defID=".. tostring(self.defID) .. ", teamID=".. tostring(self.parent.teamID) .. ", types=" .. tostring(types)) end
-    return typeTble
-  else
-    debugger("getTypesRules 7. ERROR. Invalid input. Returning nil. ID=" .. tostring(self.ID) .. ", defID=".. tostring(self.defID) .. ", teamID=".. tostring(self.parent.teamID) .. ", types=" .. tostring(types))
-    return nil
-  end
+  return self["typeRules"]
 end
 
 function pUnit:getTypesRulesForEvent(event, topPriorityOnly, canAlertNow) -- defID, string event. Returns 0 to many types with ONLY their MATCHING EVENTS: {type1 = {event = {rules}}, type2 = {event = {rules}}}
-  if debug or self.debug then debugger("getTypesRulesForEvent 1. Returning self.parent:getTypesRulesForEvent(" .. tostring(self.defID) .. ", event=" .. tostring(event) .. ", topPriorityOnly=" .. tostring(topPriorityOnly) .. "), unitID=" .. tostring(self.ID) .. ", teamID=".. tostring(self.parent.teamID)) end
-  return self.parent:getTypesRulesForEvent(self.defID, event, topPriorityOnly, canAlertNow, self)
+  if debug or self.debug then debugger("pUnit:getTypesRulesForEvent 1. Returning self.parent:getTypesRulesForEvent(" .. tostring(self.defID) .. ", event=" .. tostring(event) .. ", topPriorityOnly=" .. tostring(topPriorityOnly) .. "), unitID=" .. tostring(self.ID) .. ", teamID=".. tostring(self.parent.teamID)) end
+  if type(self["typeRules"]) ~= "table" or next(self["typeRules"]) == nil then
+    debugger("pUnit:getTypesRulesForEvent 2. ERROR. Unit has no rules. Shouldn't happen. event=" .. tostring(event) .. ", teamID="..tostring(self.ID) .. ", defID=".. tostring(self.defID) .. ", teamID=".. tostring(self.parent.teamID)  .. ", next(self[typeRules])=".. tostring(next(self["typeRules"])).. ", translatedHumanName=" .. tostring(UnitDefs[self.defID].translatedHumanName))
+    return false
+  end
+  return self.parent:getTypesRulesForEvent(self["typeRules"], event, topPriorityOnly, canAlertNow, self)
 end
 
--- TODO: Remove top to leave new at bottom
--- Where should this go? How to make it easily USER CONFIG expandable? ############################################
 function pUnit:setTypes()
   if debug or self.debug then debugger("setTypes 1. ID=" .. tostring(self.ID) .. ", defID=".. tostring(self.defID) .. ", teamID=".. tostring(self.parent.teamID)) end
   if UnitDefs[self.defID].isFactory then
     self.isFactory = true
   end
-  local unitTypes = self:getTypesRules() -- {type = {event = {rules}}}}
+  local unitTypes
+  if not isSpectator then
+    unitTypes = self.parent.defTypesEventsRules[self.defID] -- {defID = {type = {event = {rules}}}}
+  else
+    unitTypes = teamsManager.defTypesEventsRules[self.defID] -- {defID = {type = {event = {rules}}}}
+  end
   if debug or self.debug then debugger("setTypes 2. translatedHumanName=" .. tostring(UnitDefs[self.defID].translatedHumanName) .. ", type(unitTypes)=".. type(unitTypes)) end
-  if type(unitTypes) == "table" then
-    for aType, eventsTbl in pairs(unitTypes) do
-      if self.parent[aType] == nil then
-        self.parent[aType] = {}
-      end
-      self.parent[aType][self.ID] = self
-      if debug or self.debug then debugger("setTypes 3. Added self to my army's list of=" .. tostring(self.parent[aType]) .. ", translatedHumanName=" .. tostring(UnitDefs[self.defID].translatedHumanName)) end
-      local baseObj = self
-      if type(eventsTbl) == "table" and eventsTbl["sharedAlerts"] == true then
-        baseObj = baseObj.parent
-      if isSpectator then
-        baseObj = teamsManager
-      end
-      end
-      for event,rulesTbl in pairs(eventsTbl) do
-        -- debugger("setTypes TEST sharedAlerts="..tostring(rulesTbl["sharedAlerts"])..", tostring rulesTbl="..tableToString(rulesTbl))
-        if not rulesTbl["sharedAlerts"] then
-          if type(baseObj["lastAlerts"]) ~= "table" then
-            if debug then debugger("setTypes 4. lastAlerts="..type(baseObj["lastAlerts"])..", unitOrArmyObj="..type(baseObj)..", unitType="..tostring(aType)..", event="..tostring(event))end
-            baseObj["lastAlerts"] = {}
-          end
-          local lastAlerts = baseObj["lastAlerts"]
-          if type(lastAlerts[aType]) ~= "table" then
-            if debug then debugger("setTypes 5. unitOrArmyObj["..tostring(aType).."]="..type(lastAlerts[aType])..", unitOrArmyObj="..type(baseObj)..", unitType="..tostring(aType)..", event="..tostring(event))end
-            lastAlerts[aType] = {}
-          end
-          if type(lastAlerts[aType][event]) ~= "table" then
-            lastAlerts[aType][event] = {}
-            lastAlerts[aType][event]["lastNotify"] = 0
-            lastAlerts[aType][event]["alertCount"] = 0
-            lastAlerts[aType][event]["isQueued"] = false
-            if debug then debugger("setTypes 6. unitOrArmyObj["..tostring(aType).."]["..tostring(event).."]="..type(lastAlerts[aType][event])..", lastNotify="..tostring(lastAlerts[aType][event]["lastNotify"])..", alertCount="..tostring(lastAlerts[aType][event]["alertCount"])..", isQueued="..tostring(lastAlerts[aType][event]["isQueued"])..", name="..tostring(UnitDefs[self.defID].translatedHumanName)) end
-          end
+  if type(unitTypes) ~= "table" or next(unitTypes) == nil then
+    debugger("setTypes 2.1. ERROR. All created units should have rules associated to them. translatedHumanName=" .. tostring(UnitDefs[self.defID].translatedHumanName) .. ", type(unitTypes)=".. type(unitTypes))
+  end
+  self["typeRules"] = unitTypes
+  for aType, eventsTbl in pairs(unitTypes) do
+    if type(aType) ~= "string" then
+      debugger("setTypes 2.2. ERROR. aType not string. aType="..tostring(aType)..", unitName=" .. tostring(UnitDefs[self.defID].translatedHumanName) .. ", type(unitTypes)=".. type(unitTypes)..", tableToString="..tableToString(aType))
+      return nil
+    end
+    if self.parent[aType] == nil then
+      self.parent[aType] = {}
+    end
+    self.parent[aType][self.ID] = self
+    if debug or self.debug then debugger("setTypes 3. Added self to my army's list of=" .. tostring(aType) .. ", translatedHumanName=" .. tostring(UnitDefs[self.defID].translatedHumanName)) end
+    local baseObj = self
+    if type(eventsTbl) == "table" and eventsTbl["sharedAlerts"] == true then
+      baseObj = baseObj.parent
+    if isSpectator then
+      baseObj = teamsManager
+    end
+    end
+    for event,rulesTbl in pairs(eventsTbl) do
+      -- debugger("setTypes TEST sharedAlerts="..tostring(rulesTbl["sharedAlerts"])..", tostring rulesTbl="..tableToString(rulesTbl))
+      if not rulesTbl["sharedAlerts"] then
+        if type(baseObj["lastAlerts"]) ~= "table" then
+          if debug then debugger("setTypes 4. lastAlerts="..type(baseObj["lastAlerts"])..", unitOrArmyObj="..type(baseObj)..", unitType="..tostring(aType)..", event="..tostring(event))end
+          baseObj["lastAlerts"] = {}
         end
-        -- if rulesTbl["thresholdHP"] ~= nil and type(rulesTbl["thresholdHP"]) == "table" and rulesTbl["thresholdHP"]["threshMinPerc"] > 0 or rulesTbl["thresholdHP"]["threshMaxPerc"] < 1 then
-        --   if debug or self.debug then debugger("setTypes 7. Adding unit to army.thresholdHP table.")
-        --     if self.parent["thresholdHP"] == nil then
-        --       self.parent["thresholdHP"] = {}
-        --     end
-        --     self.parent["thresholdHP"][self.ID] = self
-        --   end
-        -- end
+        local lastAlerts = baseObj["lastAlerts"]
+        if type(lastAlerts[aType]) ~= "table" then
+          if debug then debugger("setTypes 5. unitOrArmyObj["..tostring(aType).."]="..type(lastAlerts[aType])..", unitOrArmyObj="..type(baseObj)..", unitType="..tostring(aType)..", event="..tostring(event))end
+          lastAlerts[aType] = {}
+        end
+        if type(lastAlerts[aType][event]) ~= "table" then
+          lastAlerts[aType][event] = {}
+          lastAlerts[aType][event]["lastNotify"] = 0
+          lastAlerts[aType][event]["alertCount"] = 0
+          lastAlerts[aType][event]["isQueued"] = false
+          if debug then debugger("setTypes 6. unitOrArmyObj["..tostring(aType).."]["..tostring(event).."]="..type(lastAlerts[aType][event])..", lastNotify="..tostring(lastAlerts[aType][event]["lastNotify"])..", alertCount="..tostring(lastAlerts[aType][event]["alertCount"])..", isQueued="..tostring(lastAlerts[aType][event]["isQueued"])..", name="..tostring(UnitDefs[self.defID].translatedHumanName)) end
+        end
+      end
+      if event == "thresholdHP" and self.parent["thresholdHP"] == nil then -- adding instantiation of persistent events
+        self.parent["thresholdHP"] = {}
+      elseif event == "idle" and self.parent["idle"] == nil then
+        self.parent["idle"] = {}
       end
     end
   end
@@ -1829,9 +1822,13 @@ function pUnit:setTypes()
   return true
 end
 
-function pUnit:hasTypeEventRules(aType,event)
-  if debug or self.debug then debugger("hasTypeEventRules 1. SHELL returns from armyManager ID=" .. tostring(self.ID) .. ", defID=".. tostring(self.defID) .. ", teamID=".. tostring(self.parent.teamID)) end
-  return self.parent:hasTypeEventRules(self.defID,aType,event)
+function pUnit:hasTypeEventRules(aType, event)
+  if debug or self.debug then debugger("pUnit:hasTypeEventRules 1. SHELL. Will return from parent method. ID=" .. tostring(self.ID) .. ", defID=".. tostring(self.defID) .. ", teamID=".. tostring(self.parent.teamID).. ", translatedHumanName=" .. tostring(UnitDefs[self.defID].translatedHumanName)) end
+  if type(self["typeRules"]) ~= "table" or next(self["typeRules"]) == nil then
+    debugger("pUnit:hasTypeEventRules 2. ERROR. Unit has no rules. Shouldn't happen. event=" .. tostring(event) .. ", teamID="..tostring(self.ID) .. ", defID=".. tostring(self.defID) .. ", teamID=".. tostring(self.parent.teamID)  .. ", next(self[typeRules])=".. tostring(next(self["typeRules"])).. ", translatedHumanName=" .. tostring(UnitDefs[self.defID].translatedHumanName))
+    return false
+  end
+  return self.parent:hasTypeEventRules(self["typeRules"], aType, event)
 end
 
 function pUnit:getCoords()
@@ -1839,35 +1836,66 @@ function pUnit:getCoords()
   local x,y,z = Spring.GetUnitPosition( self.ID )
   if type(x) == "number" then
     if debug or self.debug then debugger("getCoords 2. Returning unit's current position coords="..tostring(x).."-"..tostring(y).."-"..tostring(z)..", unitID" .. tostring(self.ID) .. ", defID=".. tostring(self.defID) .. ", teamID=".. tostring(self.parent.teamID).. tostring(UnitDefs[self.defID].translatedHumanName)) end
-    self.coords = {x=x, y=y, z=z}
+    if self["coords"] == nil then
+      self["coords"] = {}
+    end
+    self["coords"]["x"] = x
+    self["coords"]["y"] = y
+    self["coords"]["z"] = z
     return x, y, z
-    elseif type(self.coords.x) == "number" then
+  elseif type(self.coords["x"]) == "number" then
     if debug or self.debug then debugger("getCoords 3. Returning unit's old position because getCoords returned nil. coords="..tostring(x).."-"..tostring(y).."-"..tostring(z)..", unitID" .. tostring(self.ID) .. ", defID=".. tostring(self.defID) .. ", teamID=".. tostring(self.parent.teamID).. tostring(UnitDefs[self.defID].translatedHumanName)) end
-    return self.coords.x, self.coords.y, self.coords.z
+    return self.coords["x"], self.coords["y"], self.coords["z"]
   end
   if debug or self.debug then debugger("getCoords 4. FAIL. Unable to return any coords." .. tostring(self.ID) .. ", defID=".. tostring(self.defID) .. ", teamID=".. tostring(self.parent.teamID).. tostring(UnitDefs[self.defID].translatedHumanName)) end
   return nil, nil, nil
 end
 
 function pUnit:getHealth()
-  if debug or self.debug then debugger("getHealth 1. Getting unit's current position, else sending back the most recent coords." .. tostring(self.ID) .. ", defID=".. tostring(self.defID) .. ", teamID=".. tostring(self.parent.teamID).. tostring(UnitDefs[self.defID].translatedHumanName)) end
+  if debug or self.debug then debugger("getHealth 1. Getting unit's current health, else sending back the most recent health." .. tostring(self.ID) .. ", defID=".. tostring(self.defID) .. ", teamID=".. tostring(self.parent.teamID).. tostring(UnitDefs[self.defID].translatedHumanName)) end
   local health, maxHealth, paralyzeDamage, captureProgress, buildProgress = Spring.GetUnitHealth(self.ID) -- return: nil | number health, number maxHealth, number paralyzeDamage, number captureProgress, number buildProgress -- -- threshMinPerc=.5
   if type(health) == "number" then
-    if debug or self.debug then debugger("getHealth 2. Returning unit's current health. health="..tostring(health)..", maxHealth="..tostring(maxHealth)..", paralyzeDamage="..tostring(paralyzeDamage)..", captureProgress="..tostring(captureProgress)..", buildProgress="..tostring(buildProgress)..", unitID" .. tostring(self.ID) .. ", defID=".. tostring(self.defID) .. ", teamID=".. tostring(self.parent.teamID).. tostring(UnitDefs[self.defID].translatedHumanName)) end
-    self.health = {health=health, maxHealth=maxHealth, paralyzeDamage=paralyzeDamage, captureProgress=captureProgress, buildProgress=buildProgress}
-    if self.parent["thresholdHP"][self.ID] == self then
-      -- if multiple thresholdHP?
-      local alertableThreshTbl = self:getTypesRulesForEvent("thresholdHP", true, true)
-      if alertableThreshTbl ~= nil then
-        
+    self.health = {["HP"]=health, ["maxHP"]=maxHealth, ["paralyzeDamage"]=paralyzeDamage, ["captureProgress"]=captureProgress, ["buildProgress"]=buildProgress}
+    if not self.isCompleted and buildProgress == 1 then
+      self.isCompleted = true
+      if debug or self.debug then debugger("getHealth 2. self.isCompleted set to true." .. tostring(self.ID) .. ", defID=".. tostring(self.defID) .. ", teamID=".. tostring(self.parent.teamID).. tostring(UnitDefs[self.defID].translatedHumanName)) end
+    end
+    if self:hasTypeEventRules(nil, "thresholdHP") then
+      local topPriority
+      local bestPriority = 9999
+      local thresholdMet = false
+      local healthPerc = self["health"]["HP"] / self["health"]["maxHP"]
+      if debug or self.debug then debugger("getHealth 3. thresholdHP, healthPerc=" .. tostring(healthPerc)) end
+      for aType,eventTbl in pairs(self["typeRules"]) do
+        if type(eventTbl["thresholdHP"]) == "table" and type(eventTbl["thresholdHP"]["threshMinPerc"]) == "number" then
+          if healthPerc < eventTbl["thresholdHP"]["threshMinPerc"] then
+            thresholdMet = true
+            if eventTbl["thresholdHP"]["priority"] < bestPriority and self.parent:canAlertNow(self, {[aType] = {["thresholdHP"] = eventTbl["thresholdHP"]}}) then
+              if debug or self.debug then debugger("getHealth 4. Adding canAlert thresholdHP, healthPerc=" .. tostring(healthPerc)..", threshMinPerc="..eventTbl["thresholdHP"]["threshMinPerc"]..", priority="..tostring(eventTbl["thresholdHP"]["priority"])) end
+              topPriority = {[aType] = {["thresholdHP"] = eventTbl["thresholdHP"]}}
+              bestPriority = eventTbl["thresholdHP"]["priority"]
+            end
+          end
+        end
+      end
+      if type(topPriority) == "table" then
+        if debug or self.debug then debugger("getHealth 5. Going to addUnitToAlertQueue.") end
+        teamsManager:addUnitToAlertQueue(self, topPriority)
+      elseif thresholdMet then
+        if self.parent["thresholdHP"][self.ID] == nil then
+          self.parent["thresholdHP"][self.ID] = self
+        end
+      elseif self.parent["thresholdHP"][self.ID] then
+        self.parent["thresholdHP"][self.ID] = nil
       end
     end
+    if debug or self.debug then debugger("getHealth 6. Returning unit's current health. health="..tostring(health)..", maxHealth="..tostring(maxHealth)..", paralyzeDamage="..tostring(paralyzeDamage)..", captureProgress="..tostring(captureProgress)..", buildProgress="..tostring(buildProgress)..", unitID" .. tostring(self.ID) .. ", defID=".. tostring(self.defID) .. ", teamID=".. tostring(self.parent.teamID).. tostring(UnitDefs[self.defID].translatedHumanName)) end
     return health, maxHealth, paralyzeDamage, captureProgress, buildProgress
   elseif type(self.health["health"]) == "number" then
-    if debug or self.debug then debugger("getHealth 3. Returning unit's old health because GetUnitHealth returned nil. health="..tostring(self.health["health"])..", maxHealth="..tostring(self.health["maxHealth"])..", paralyzeDamage="..tostring(self.health["paralyzeDamage"])..", captureProgress="..tostring(self.health["captureProgress"])..", buildProgress="..tostring(self.health["buildProgress"])..", unitID" .. tostring(self.ID) .. ", defID=".. tostring(self.defID) .. ", teamID=".. tostring(self.parent.teamID).. tostring(UnitDefs[self.defID].translatedHumanName)) end
+    if debug or self.debug then debugger("getHealth 7. Returning unit's old health because GetUnitHealth returned nil. health="..tostring(self.health["health"])..", maxHealth="..tostring(self.health["maxHealth"])..", paralyzeDamage="..tostring(self.health["paralyzeDamage"])..", captureProgress="..tostring(self.health["captureProgress"])..", buildProgress="..tostring(self.health["buildProgress"])..", unitID" .. tostring(self.ID) .. ", defID=".. tostring(self.defID) .. ", teamID=".. tostring(self.parent.teamID).. tostring(UnitDefs[self.defID].translatedHumanName)) end
     return self.health["health"], self.health["maxHealth"], self.health["paralyzeDamage"], self.health["captureProgress"], self.health["buildProgress"]
   end
-  if debug or self.debug then debugger("getHealth 4. FAIL. Unable to return any health attributes." .. tostring(self.ID) .. ", defID=".. tostring(self.defID) .. ", teamID=".. tostring(self.parent.teamID).. tostring(UnitDefs[self.defID].translatedHumanName)) end
+  if debug or self.debug then debugger("getHealth 8. FAIL. Unable to return any health attributes." .. tostring(self.ID) .. ", defID=".. tostring(self.defID) .. ", teamID=".. tostring(self.parent.teamID).. tostring(UnitDefs[self.defID].translatedHumanName)) end
   return nil
 end
 -- ################################################## Custom/Expanded Unit methods starts here #################################################
@@ -1928,7 +1956,7 @@ if debug then debugger("makeRelTeamDefsRules 1.") end
         if debug then debugger("Assigning Commander types with unitDefID[" ..tostring(unitDefID) .. "].translatedHumanName=" ..tostring(UnitDefs[unitDefID].translatedHumanName)) end
         addToRelTeamDefsRules(unitDefID, "commander")
         addToRelTeamDefsRules(unitDefID, "constructor")
-      elseif unitDef.buildSpeed > 0 and not string.find(unitDef.name, 'spy') and (unitDef.canAssist or unitDef.buildOptions[1]) and not unitDef.customParams.isairbase then
+      elseif unitDef.buildSpeed > 0 and not string.find(unitDef.name, 'spy') and (unitDef.canAssist or unitDef.buildOptions[1]) and not unitDef.customParams.isairbase and unitDef.movementclass ~= "NANO" then
         if unitDef.canAssist or unitDef.canAssist and (next(trackMyTypesRules["constructor"]) ~= nil or next(trackAllyTypesRules["constructor"]) ~= nil or next(trackEnemyTypesRules["constructor"]) ~= nil) then     -- check is this constructor was: unitDef.canConstruct and unitDef.canAssist 
           addToRelTeamDefsRules(unitDefID, "constructor")
           if debug then debugger("Assigning Constructor types with unitDefID[" ..tostring(unitDefID) .. "].translatedHumanName=" ..tostring(UnitDefs[unitDefID].translatedHumanName)) end
@@ -1948,13 +1976,23 @@ if debug then debugger("makeRelTeamDefsRules 1.") end
           addToRelTeamDefsRules(unitDefID, "rezBot")
         end
       end
-      if unitDef.isBuilding and unitDef.customParams and unitDef.customParams.metal_extractor then -- or def.extractsMetal > 0
-        if debug then debugger("Assigning Metal Extractor types with unitDefID[" ..tostring(unitDefID) .. "].translatedHumanName=" ..tostring(UnitDefs[unitDefID].translatedHumanName)) end
+      if unitDef.isBuilding and unitDef.customParams and unitDef.customParams.metal_extractor and unitDef.extractsMetal > 0 then -- or def.extractsMetal > 0
+        if unitDef.customParams.techlevel == '2' then
+          if debug then debugger("Assigning T2 Metal Extractor types with unitDefID[" ..tostring(unitDefID) .. "].translatedHumanName=" ..tostring(UnitDefs[unitDefID].translatedHumanName)) end
+          addToRelTeamDefsRules(unitDefID, "mexT2")
+        else
+          if debug then debugger("Assigning Metal Extractor types with unitDefID[" ..tostring(unitDefID) .. "].translatedHumanName=" ..tostring(UnitDefs[unitDefID].translatedHumanName)) end
           addToRelTeamDefsRules(unitDefID, "mex")
+        end
       end
       if unitDef.isBuilding and unitDef.customParams and unitDef.customParams.unitgroup == "energy" then -- or def.energyMake > 10
-        if debug then debugger("Assigning energyGen types with unitDefID[" ..tostring(unitDefID) .. "].translatedHumanName=" ..tostring(UnitDefs[unitDefID].translatedHumanName)) end
+        if unitDef.customParams.techlevel == '2' then
+          if debug then debugger("Assigning energyGenT2 types with unitDefID[" ..tostring(unitDefID) .. "].translatedHumanName=" ..tostring(UnitDefs[unitDefID].translatedHumanName)) end
+          addToRelTeamDefsRules(unitDefID, "energyGenT2")
+        else
+          if debug then debugger("Assigning energyGen types with unitDefID[" ..tostring(unitDefID) .. "].translatedHumanName=" ..tostring(UnitDefs[unitDefID].translatedHumanName)) end
           addToRelTeamDefsRules(unitDefID, "energyGen")
+        end
       end
       if unitDef.isBuilding and ((type(unitDef["radarDistance"]) == "number" and unitDef["radarDistance"] > 1900) or (type(unitDef["sonarDistance"]) == "number" and unitDef["sonarDistance"] > 850)) then
         if debug then debugger("Assigning Radar types with unitDefID[" ..tostring(unitDefID) .. "].translatedHumanName=" ..tostring(UnitDefs[unitDefID].translatedHumanName)) end
@@ -2007,7 +2045,7 @@ end
 function widget:UnitIdle(unitID, defID, teamID)
   if debug then debugger("widget:UnitIdle 1. unitID=" .. tostring(unitID)..", defID=" .. tostring(defID) .. ", teamID=" .. tostring(teamID) .. ", translatedHumanName=" .. tostring(UnitDefs[defID].translatedHumanName)) end
   local anArmy = teamsManager:getArmyManager(teamID)
-  if anArmy and anArmy:hasTypeEventRules(defID, nil, "idle") then
+  if anArmy and anArmy:hasTypeEventRules(defID) then
     teamsManager:getOrCreateUnit(unitID, defID, teamID):setIdle() -- automatically alerts for this
     -- local unit = teamsManager:getOrCreateUnit(unitID, defID, teamID)
     -- if unit then
@@ -2017,45 +2055,44 @@ function widget:UnitIdle(unitID, defID, teamID)
 end
 
 -- Mex destroyed when creating T2 on T1
-function widget:UnitDestroyed(unitID, defID, unitTeam, attackerID, attackerDefID, attackerTeam)	-- Triggered when unit dies or construction canceled/destroyed while being built
-  if debug then debugger("UnitDestroyed 1. Unit taken. unitID=" .. tostring(unitID) .. ", unitDefID=" ..tostring(defID) .. ", attackerID=" ..tostring(attackerID) .. ", attackerDefID=" ..tostring(attackerDefID) .. ", attackerTeam=" ..tostring(attackerTeam)) end
+function widget:UnitDestroyed(unitID, defID, teamID, attackerID, attackerDefID, attackerTeam)	-- Triggered when unit dies or construction canceled/destroyed while being built
+  if debug then debugger("widget:UnitDestroyed 1. Unit taken. unitID=" .. tostring(unitID) .. ", unitDefID=" ..tostring(defID) .. ", attackerID=" ..tostring(attackerID) .. ", attackerDefID=" ..tostring(attackerDefID) .. ", attackerTeam=" ..tostring(attackerTeam) .. ", translatedHumanName=" .. tostring(UnitDefs[defID].translatedHumanName)) end
   if debug then debugger("UnitDestroyed 2 unitID=" ..tostring(unitID) .. ", translatedHumanName=" .. tostring(UnitDefs[defID].translatedHumanName)) end
-  local army = teamsManager:getArmyManager(unitTeam)
+  local army = teamsManager:getArmyManager(teamID)
   if army and army:hasTypeEventRules(defID, nil, "destroyed") then
     army:getOrCreateUnit(unitID, defID):setLost() -- automatically alerts for this
   end
 end
 
 function widget:UnitTaken(unitID, defID, oldTeamID, newTeamID)
-  if debug then debugger("UnitTaken 1. Unit taken. unitID=" .. tostring(unitID) .. ", unitDefID=" ..tostring(defID)  .. ", oldTeamID=" ..tostring(oldTeamID) .. ", newTeamID=" ..tostring(newTeamID)) end
+  if not teamsManager:validIDs(true, unitID, true, defID, true, oldTeamID, true, newTeamID, nil, nil) then debugger("UnitTaken 0. INVALID input. Returning nil. unitID=" .. tostring(unitID)..", defID=" .. tostring(defID) .. ", oldTeamID=" .. tostring(oldTeamID) .. ", newTeamID=" .. tostring(newTeamID) .. ", translatedHumanName=" .. tostring(UnitDefs[defID].translatedHumanName)) return nil end
+  if debug then debugger("widget:UnitTaken 1. Unit taken. unitID=" .. tostring(unitID) .. ", unitDefID=" ..tostring(defID)  .. ", oldTeamID=" ..tostring(oldTeamID) .. ", newTeamID=" ..tostring(newTeamID)) end
   if teamsManager:getArmyManager(oldTeamID):hasTypeEventRules(defID) or teamsManager:getArmyManager(newTeamID):hasTypeEventRules(defID) then
     local oldArmy = teamsManager:getArmyManager(oldTeamID)
     if oldArmy then
       local aUnit = oldArmy:getOrCreateUnit(unitID, defID)
       if aUnit then
         teamsManager:moveUnit(unitID, defID, oldTeamID, newTeamID) -- automatically alerts for this
-        if newTeamID == myTeamID then
-          aUnit:getIdle() -- automatically alerts for this
-        end
+        aUnit:getIdle() -- automatically alerts for this
       end
     end
   end
 end
 
 function widget:UnitCreated(unitID, defID, teamID, builderID)
-  if debug then debugger("UnitCreated 1. Unit construction started. unitID=" .. tostring(unitID) .. ", unitDefID=" ..tostring(defID) .. ", teamID=" ..tostring(teamID) .. ", builderID=" ..tostring(builderID)) end
+  if debug then debugger("widget:UnitCreated 1. Unit construction started. unitID=" .. tostring(unitID) .. ", unitDefID=" ..tostring(defID) .. ", teamID=" ..tostring(teamID) .. ", builderID=" ..tostring(builderID) .. ", translatedHumanName=" .. tostring(UnitDefs[defID].translatedHumanName)) end
   local army = teamsManager:getArmyManager(teamID)
-  if army and army:hasTypeEventRules(defID, nil, "created") then
+  if army and army:hasTypeEventRules(defID) then
     army:getOrCreateUnit(unitID, defID) -- automatically alerts for this
   end
 end
 
 function widget:UnitFinished(unitID, defID, teamID, builderID)
-  if debug then debugger("UnitFinished 1 is now completed and ready. unitID=" .. tostring(unitID) .. ", unitDefID=" ..tostring(defID) .. ", teamID=" ..tostring(teamID) .. ", builderID=" ..tostring(builderID)) end
+  if debug then debugger("widget:UnitFinished 1 is now completed and ready. unitID=" .. tostring(unitID) .. ", unitDefID=" ..tostring(defID) .. ", teamID=" ..tostring(teamID) .. ", builderID=" ..tostring(builderID) .. ", translatedHumanName=" .. tostring(UnitDefs[defID].translatedHumanName)) end
   local army = teamsManager:getArmyManager(teamID)
-  if army and army:hasTypeEventRules(defID, nil, "finished") then
+  if army and army:hasTypeEventRules(defID) then
     local aUnit = army:getOrCreateUnit(unitID, defID)
-    if debug then debugger("UnitFinished 2. Sending alert. unitID=" .. tostring(unitID) .. ", unitDefID=" ..tostring(defID) .. ", teamID=" ..tostring(teamID) .. ", builderID=" ..tostring(builderID)) end
+    if debug then debugger("widget:UnitFinished 2. Sending alert. unitID=" .. tostring(unitID) .. ", unitDefID=" ..tostring(defID) .. ", teamID=" ..tostring(teamID) .. ", builderID=" ..tostring(builderID)) end
     local finishedEvent = aUnit:getTypesRulesForEvent("finished", true, true)
     if finishedEvent then
       teamsManager:addUnitToAlertQueue(aUnit, finishedEvent)
@@ -2064,34 +2101,27 @@ function widget:UnitFinished(unitID, defID, teamID, builderID)
   end
 end
 
-function widget:Initialize()
-	Spring.Echo("Starting " .. widgetName)
-    widget:PlayerChanged()
-	if isSpectator then
-    if true then debugger("Initialize 1. isSpectator=true") end --  .. ", translatedHumanName=" .. tostring(UnitDefs[defID].translatedHumanName)
-		return
-	end
-  -- loadAllExistingUnits #############
-  -- if Spring.GetGameSeconds() > 1 then
-  --   -- TODO: Load All Units if replay or starting mid-game ########## 
-  -- end
-end
-
 function widget:UnitEnteredLos(unitID, teamID, allyTeam, defID) -- Called when a unit enters LOS of an allyteam. Its called after the unit is in LOS, so you can query that unit. The allyTeam is who's LOS the unit entered.
-  if debug then debugger("UnitEnteredLos 1. unitID=" .. tostring(unitID)..", defID=" .. tostring(defID) .. ", teamID=" .. tostring(teamID) .. ", allyTeam=" .. tostring(allyTeam)) end --  .. ", translatedHumanName=" .. tostring(UnitDefs[defID].translatedHumanName)
+  if isSpectator then
+    return
+  end
   if defID == nil then
     defID = Spring.GetUnitDefID(unitID)
     if defID == nil then
-      debugger("UnitEnteredLos 2. Cannot get defID for unit?")
+      debugger("widget:UnitEnteredLos 0. Cannot get defID for unit?")
       return nil
     end
   end
+  if not teamsManager:validIDs(true, unitID, nil, nil, true, teamID, nil, nil, nil, nil) then debugger("UnitEnteredLos 0. INVALID input. Returning nil unitID=" .. tostring(unitID)..", defID=" .. tostring(defID) .. ", teamID=" .. tostring(teamID) .. ", allyTeam=" .. tostring(allyTeam) .. ", translatedHumanName=" .. tostring(UnitDefs[defID].translatedHumanName)) return nil end
+  if debug then debugger("widget:UnitEnteredLos 1. unitID=" .. tostring(unitID)..", defID=" .. tostring(defID) .. ", teamID=" .. tostring(teamID) .. ", allyTeam=" .. tostring(allyTeam) .. ", translatedHumanName=" .. tostring(UnitDefs[defID].translatedHumanName)) end -- 
   local anArmy = teamsManager:getArmyManager(teamID)
-  if anArmy and anArmy:hasTypeEventRules(defID, nil, "los") then
+  if anArmy and anArmy:hasTypeEventRules(defID) then
     local aUnit = teamsManager:getOrCreateUnit(unitID, defID, teamID)
-    local losEvent = aUnit:getTypesRulesForEvent("los", true, false)
-    if losEvent then
-      teamsManager:addUnitToAlertQueue(aUnit, losEvent)
+    if aUnit then
+      local losEvent = aUnit:getTypesRulesForEvent("los", true, true)
+      if losEvent then
+        teamsManager:addUnitToAlertQueue(aUnit, losEvent)
+      end
     end
   end
 end
@@ -2099,22 +2129,35 @@ end
 -- Need to ensure GameFrame checks every time and readds them to alerts as needed
 -- check HP too?
 local function checkQueuesOfInactiveUnits() -- Only checks units with idle event rules and are in the parent["idle"] table
+  debug = false
   if debug then debugger("checkQueuesOfInactiveUnits 1.") end
-  if type(teamsManager.myArmyManager["idle"]) == "table" then
-    for unitID, unit in pairs(teamsManager.myArmyManager["idle"]) do
-      if debug then debugger("checkQueuesOfInactiveUnits 2. unitID=" ..tostring(unitID) .. ", defID=" ..tostring(unit.defID) .. ", isFactory=" .. tostring(unit.isFactory) .. ", translatedHumanName=" .. tostring(UnitDefs[unit.defID].translatedHumanName)) end
-      if unit:getIdle() == true then
-        if debug then debugger("checkQueuesOfInactiveUnits 3. Builder idle. unitID=" ..tostring(unitID) .. ", defID=" ..tostring(unit.defID)) end
-        local canAlertNowTbl = unit:getTypesRulesForEvent("idle", true, true)
-        if canAlertNowTbl then
-          teamsManager:addUnitToAlertQueue(unit, canAlertNowTbl)
+  local armiesToCheck
+  if isSpectator then
+    if debug then debugger("checkQueuesOfInactiveUnits 2. isSpectator, using all armies.") end
+    armiesToCheck = teamsManager.armies
+  else -- self.armies[teamID] = armyManager
+  if debug then debugger("checkQueuesOfInactiveUnits 2. Is Player, using myArmyManager.") end
+    armiesToCheck = {myTeamID = teamsManager.myArmyManager}
+  end
+  for aTeamID, anArmyManager in pairs(armiesToCheck) do
+    if type(anArmyManager["idle"]) == "table" then
+      for unitID, unit in pairs(anArmyManager["idle"]) do
+        if debug then debugger("checkQueuesOfInactiveUnits 3. Checking if idle. unitID=" ..tostring(unitID) .. ", defID=" ..tostring(unit.defID) .. ", isFactory=" .. tostring(unit.isFactory) .. ", teamID=" .. tostring(unit.parent.teamID) .. ", translatedHumanName=" .. tostring(UnitDefs[unit.defID].translatedHumanName)) end
+        if not teamsManager:getQueuedEvents(unit) and unit:getIdle() == true then
+          if debug then debugger("checkQueuesOfInactiveUnits 4. Builder idle. unitID=" ..tostring(unitID) .. ", defID=" ..tostring(unit.defID) .. ", teamID=" .. tostring(unit.parent.teamID)) end
         end
-      -- else
-      --   if debug then debugger("checkQueuesOfInactiveUnits 4. Builder NOT idle. unitID=" ..tostring(unitID) .. ", defID=" ..tostring(unit.defID)) end
+      end
+    end
+    if type(anArmyManager["thresholdHP"]) == "table" then
+      for unitID, unit in pairs(anArmyManager["thresholdHP"]) do
+        if debug then debugger("checkQueuesOfInactiveUnits 5. Checking thresholdHP. unitID=" ..tostring(unitID) .. ", defID=" ..tostring(unit.defID) .. ", teamID=" .. tostring(unit.parent.teamID) .. ", translatedHumanName=" .. tostring(UnitDefs[unit.defID].translatedHumanName)) end
+        if not teamsManager:getQueuedEvents(unit) then
+          unit:getHealth() -- automatically alerts for this
+        end
       end
     end
   end
-  -- thresholdHP
+  debug = false
 end
 
 -- function widget:UnitDamaged(unitID, unitDefID, unitTeam, damage, paralyzer, weaponDefID, projectileID, attackerID, attackerDefID, attackerTeam)
@@ -2123,32 +2166,47 @@ end
 -- end
 
 function widget:CommandsChanged() -- Called when the command descriptions changed, e.g. when selecting or deselecting a unit. Because widget:UnitIdle doesn't happen when factory queue is removed by player
-  -- local oldDebug = debug
-  -- debug = true
-  if debug then debugger("CommandsChanged 1. Called when the command descriptions changed, e.g. when selecting or deselecting a unit.") end
+  if debug then debugger("widget:CommandsChanged 1. Called when the command descriptions changed, e.g. when selecting or deselecting a unit.") end
 	if type(teamsManager.myArmyManager["factory"]) == "table" then
     for unitID, unit in pairs(teamsManager.myArmyManager["factory"]) do
       if debug then debugger("CommandsChanged 2. unitID=" ..tostring(unitID) .. ", defID=" ..tostring(unit.defID) .. ", isFactory=" .. tostring(unit.isFactory) .. ", translatedHumanName=" .. tostring(UnitDefs[unit.defID].translatedHumanName)) end
       if unit:getIdle() == true then -- automatically adds unit to idle alert queue if it applies
-        if debug then debugger("CommandsChanged 3. Factory added to parent[idle] table. unitID=" ..tostring(unitID) .. ", defID=" ..tostring(unit.defID)) end
-      else
-        if debug then debugger("CommandsChanged 4. Factory NOT idle. unitID=" ..tostring(unitID) .. ", defID=" ..tostring(unit.defID)) end
+        if debug then debugger("widget:CommandsChanged 3. Factory added to parent[idle] table. unitID=" ..tostring(unitID) .. ", defID=" ..tostring(unit.defID)) end
       end
     end
   end
-  -- debug = oldDebug
 end
--- commander start position Spring.GetAllyTeamStartBox ( number allyID )
--- figure out logic for if new alert is added to queue
+-- how to get start spot?
 function widget:GameFrame(frame)
   if warnFrame == 1 then -- with 30 UpdateInterval, would run every half second
     checkQueuesOfInactiveUnits() -- Needed
-    if priorityQueue:isEmpty() == false then -- still idling after we checked the queues
+    if alertQueue:getSize() > 0 then -- still idling after we checked the queues
       teamsManager:alert()
     end
   end
   warnFrame = (warnFrame + 1) % UpdateInterval -- With changes at top, this would automatically run every half second
 end
+
+function widget:Initialize()
+	Spring.Echo("Starting " .. widgetName)
+    widget:PlayerChanged()
+	if isSpectator then
+    if true then debugger("widget:Initialize 1. isSpectator=true") end --  .. ", translatedHumanName=" .. tostring(UnitDefs[defID].translatedHumanName)
+	end
+  if not makeRelTeamDefsRules() then
+    debugger("makeRelTeamDefsRules() returned FALSE. Fix trackMyTypesRules, trackAllyTypesRules, trackEnemyTypesRules tables.")
+    widgetHandler:RemoveWidget()
+  end
+  teamsManager:makeAllArmies() -- Build all teams/armies
+  debug = false
+  return
+  -- loadAllExistingUnits #############
+  -- if Spring.GetGameSeconds() > 1 then
+  --   -- TODO: Load All Units if replay or starting mid-game ########## 
+  -- end
+end
+
+-- When maxAlerts met, remove rule, but don't worry about the units... until much later
 
 function widget:Shutdown()
 	Spring.Echo(widgetName .. " widget disabled")
@@ -2173,20 +2231,16 @@ end
 
 
 
-debug = false
-if not makeRelTeamDefsRules() then
-  debugger("makeRelTeamDefsRules() returned FALSE. Fix trackMyTypesRules, trackAllyTypesRules, trackEnemyTypesRules tables.")
-  widgetHandler:RemoveWidget()
-end
-teamsManager:makeAllArmies() -- Build all teams/armies
-debug = false
+-- debug = false
+-- if not makeRelTeamDefsRules() then
+--   debugger("makeRelTeamDefsRules() returned FALSE. Fix trackMyTypesRules, trackAllyTypesRules, trackEnemyTypesRules tables.")
+--   widgetHandler:RemoveWidget()
+-- end
+-- teamsManager:makeAllArmies() -- Build all teams/armies
 
 
 -- aUnit.debug = true
 
--- debugger("aUnitTypeRules=" .. tableToString(aUnit:getTypesRules()))
--- debugger("bUnitTypeRules Con=" .. tableToString(bUnit:getTypesRules("constructor")))
--- debugger("bUnitTypeRules arr=" .. tableToString(bUnit:getTypesRules(arr)))
 -- debugger("bUnit.parent[constructor] type=" .. type(bUnit.parent["constructor"]))
 -- debugger("bUnit.parent[constructor] type=" .. tableToString(bUnit.parent["constructor"]))
 -- bUnit:setTypes()
@@ -2203,7 +2257,6 @@ debug = false
 -- debugger("Unit hasTypeEventRules=" .. tostring(enemyCUnit:hasTypeEventRules()) .. ", name=" .. tostring(UnitDefs[enemyCUnit.defID].translatedHumanName))
 -- debugger("Unit hasTypeEventRules=" .. tostring(enemyCUnit:hasTypeEventRules()) .. ", name=" .. tostring(UnitDefs[enemyCUnit.defID].translatedHumanName))
 -- local typeRules = cUnit:getTypesRulesForEvent("idle")
--- local typeRules = cUnit:getTypesRules({"commander"})
 -- debugger("validTypeEventRulesTbls=" .. tostring(validTypeEventRulesTbls(typeRules)))
 -- debugger("tableToString=" .. tableToString(typeRules))
 -- cUnit:setLost(false)
@@ -2335,12 +2388,6 @@ debug = false
 --   i = i + 1
 -- end
 
-
--- local kioi = {teamID=0, unitType="commander", event="idle", lastNotify=0, sharedAlerts=false, priority=2, reAlertSec=15, maxAlerts=0, alertCount=1, maxQueueTime=nil, alertSound="sounds/commands/cmd-selfd.wav", mark=nil, ping=false, threshMinPerc=.5, threshMaxPerc=0.9}
--- {teamID=, unitType=, event=, lastNotify=, sharedAlerts=, priority=, reAlertSec=, maxAlerts=, alertCount=, maxQueueTime=, alertSound=, mark=, ping=, threshMinPerc=, threshMaxPerc=}
--- {teamID=, unitType=, event=, lastNotify=, sharedAlerts=, priority=, reAlertSec=, maxAlerts=, alertCount=, maxQueueTime=, alertSound=, mark=, ping=, threshMinPerc=, threshMaxPerc=}
--- {teamID=, unitType=, event=, lastNotify=, sharedAlerts=, priority=, reAlertSec=, maxAlerts=, alertCount=, maxQueueTime=, alertSound=, mark=, ping=, threshMinPerc=, threshMaxPerc=}
-
 -- :insert(value, alertRulesTbl, priority) -- alertRulesTbl should have all (key,pair) vars that can be used to determine whether and how to alert key,pair: {teamID, unitType, event, lastNotify, sharedAlerts, priority, reAlertSec, maxAlerts, alertCount, maxQueueTime, alertSound, mark, ping, threshMinPerc, threshMaxPerc}
 
 -- alertQueue:insert(value, alertRulesTbl, priority) -- alertRulesTbl should have all (key,pair) vars that can be used to determine whether and how to alert key,pair: {teamID, unitType, event, lastNotify, sharedAlerts, priority, reAlertSec, maxAlerts, alertCount, maxQueueTime, alertSound, mark, ping, threshMinPerc, threshMaxPerc}
@@ -2449,12 +2496,3 @@ end
     -- local aTest = "setIdle"
     -- unit[aTest](unit, 1234)
 ]]
-
--- how to remove item from alertQueue
-    -- if matchedEvents then
-    --   debugger("updating alertQueue.")
-    --   alertQueue.heap[matchedEvents] = alertQueue.heap[size]
-    --   alertQueue.heap[size] = nil
-    --   alertQueue.size = size - 1
-    --   alertQueue:_sink(1)
-    -- end
