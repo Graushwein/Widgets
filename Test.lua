@@ -12,11 +12,9 @@ function widget:GetInfo()
 end
 -- TODO: make separate lua files. VFS: https://springrts.com/wiki/Lua_VFS
 -- TODO: make so only widgets needed are imported
--- When maxAlerts met when sharedAlerts, remove rule to keep new units being loaded, but don't worry about the existing units... until much later
+-- When maxAlerts met using sharedAlerts, remove rule to keep new units being loaded, but don't worry about the existing units... until much later
 -- ################################################# Config variables starts here #################################################
 local soundVolume = 1.0 -- Set the volume between 0.0 and 1.0. NOT USED
-
-local minSecsBetweenNotifications = 3 -- Seconds. if 2 or more type of notifications has to send, then this many seconds will be there between those notifications
 
 local trackAllMyUnitsRules = {} -- Not implemented
 local trackAllEnemyUnitsRules = {} -- or use something like {hp, coords, ,damaged, destroyed} -- What else?
@@ -24,10 +22,23 @@ local trackAllAlliedUnitsRules = {} --
 
 local UpdateInterval = 30 -- 30 runs once per second, 1=30/sec, 60=1/2sec
 local minReAlertSec = 3 -- to prevent a bunch at once
+local deleteDestroyed = false
+
+local alertAllTaken = false
+local alertAllTakenRules = {anyTaken = {["alertAllTaken"] = {sharedAlerts=true, reAlertSec=3, mark="Unit Taken"}}} -- KEEP "sharedAlerts=true", else this can SPAM
+local alertAllGiven = false
+local alertAllGivenRules = {anyGiven = {["alertAllGiven"] = {sharedAlerts=true, reAlertSec=3, mark="Unit Given"}}} -- KEEP "sharedAlerts=true", else this can SPAM
+
+-- add to 
+  -- place that instantiates shared events
+  -- widget:UnitTaken
+  -- moveUnit
+-- alertAllTakenRules -- {anyTaken = {["alertAllTaken"] = {sharedAlerts=true, reAlertSec=3, mark="Unit Taken"}}}
+-- alertAllGivenRules -- {anyGiven = {["alertAllGiven"] = {sharedAlerts=true, reAlertSec=3, mark="Unit Given"}}}
 
 -- Newly added event events/rules will need to be added here
-local validEvents = {"created","finished","idle","destroyed","los","thresholdHP"} -- TODO: ,"damaged","taken","enteredAir","stockpile"
-local validEventRules = {"sharedAlerts", "priority", "reAlertSec", "maxAlerts", "alertDelay", "maxQueueTime", "alertSound", "mark", "ping","messageTo","messageTxt", "threshMinPerc", "threshMaxPerc"}
+local validEvents = {"created","finished","idle","destroyed","los","thresholdHP","taken","given"} -- TODO: ,"damaged","enteredAir","stockpile". Damaged not implemented only out of untested performance impacts
+local validEventRules = {"sharedAlerts", "priority", "reAlertSec", "maxAlerts", "alertDelay", "maxQueueTime", "alertSound", "mark", "ping","messageTo","messageTxt", "threshMinPerc"} -- TODO: , "threshMaxPerc"
 -- most validEventRules are used in getEventRulesNotifyVars(typeEventRulesTbl, unitObj)
 -- mark = only you see. ping = ALL ALLIES see it. Be careful with ping
 -- Priority from 0-99999, decimals okay, default 5. 0 ignores minSecsBetweenNotifications and will notify immediately
@@ -61,7 +72,6 @@ local myRezBotRules = {idle = {sharedAlerts=true, maxAlerts=0, reAlertSec=15, al
 local myMexRules = {destroyed = {maxAlerts=0, reAlertSec=2, mark="Mex Lost", alertSound=nil}, taken = {maxAlerts=0, reAlertSec=1, mark="Mex Taken", alertSound=nil}}
 local myEnergyGenRules = {finished = {maxAlerts=0, reAlertSec=20, mark=nil, alertSound=nil}, destroyed = {maxAlerts=0, reAlertSec=1, mark="Generator Lost", alertSound=nil}} -- reAlertSec only used if mark/sound wanted. Saved so custom code can do something with the information.
 local myRadarRules = {finished = {maxAlerts=0, reAlertSec=1, mark="Radar Built", alertSound="sounds/commands/cmd-selfd.wav"}, destroyed = {maxAlerts=0, reAlertSec=1, mark="Radar Lost", alertSound="sounds/commands/cmd-selfd.wav"}}
-local myNukeRules = {created = {mark="Nuke Started"}, finished = {mark="Nuke Completed"}}
 -- local myRules = 
 local trackMyTypesRules = {
 	commander = myCommanderRules,
@@ -71,7 +81,6 @@ local trackMyTypesRules = {
 	mex = myMexRules,
 	energyGen = myEnergyGenRules,
 	radar = myRadarRules,
-	nuke = myNukeRules
 }
 local allyCommanderRules = {} -- Won't track unless rules added to it
 local allyConstructorRules = {}
@@ -97,7 +106,7 @@ local enemyConstructorRules = {}
 local enemyFactoryRules = {}
 local enemyFactoryT2Rules = {los = {maxAlerts=1, reAlertSec=15, mark="T2 enemy", alertSound=nil}} -- Hope you're ready!
 local enemyRezBotRules = {}
-local enemyMexRules = {destroyed = {maxAlerts=0, reAlertSec=1, mark=nil, alertSound=nil}} -- No alert means it only destroyed enemy mex will be tracked. To have it track alive mex, use "los"
+local enemyMexRules = {destroyed = {maxAlerts=0, reAlertSec=1, mark=nil, alertSound=nil}} -- Must have a rule to make it track the units. No alert means it only destroyed enemy mex will be tracked. To have it track alive mex, use "los"
 local enemyEnergyGenRules = {}
 local enemyRadarRules = {}
 local enemyUnitsT2Rules = {}
@@ -123,6 +132,7 @@ local trackEnemyTypesRules = {
 	nuke = enemyNukeRules,
 	antinuke = enemyAntiNukeRules
 }
+-- For spectator: could make sharedAlerts=all/team so can have shared team alerts!
 local spectatorCommanderRules = {thresholdHP = {maxAlerts=0, reAlertSec=60, mark="Danger!", alertSound="sounds/commands/cmd-selfd.wav", threshMinPerc=.8, priority=0}}
 local spectatorConstructorRules = {idle = {sharedAlerts=true, maxAlerts=0, reAlertSec=10, alertDelay=.1, mark="Constructor Idle"}, destroyed = {reAlertSec=10, mark="Con Destroyed"}}
 local spectatorFactoryRules = {finished = {sharedAlerts=true, maxAlerts=2, reAlertSec=1, mark="Factory Finished"}}
@@ -747,11 +757,73 @@ function teamsManager:moveUnit(unitID, defID, oldTeamID, newTeamID)
       return nil
     end
   end
+
+  -- Need to TEST
+  -- alertAllTakenRules -- {anyTaken = {["alertAllTaken"] = {sharedAlerts=true, reAlertSec=3, mark="Unit Taken"}}}
+  -- alertAllGivenRules -- {anyGiven = {["alertAllGiven"] = {sharedAlerts=true, reAlertSec=3, mark="Unit Given"}}}
+  if alertAllTaken or alertAllGiven then
+    local takenType, takenEvntTbl = next(alertAllTakenRules)
+    local givenType, givenEvntTbl = next(alertAllGivenRules)
+    for aType, eventsTbl in pairs({[takenType]=takenEvntTbl , [givenType]=givenEvntTbl }) do
+      for event,rulesTbl in pairs(eventsTbl) do
+        if not rulesTbl["sharedAlerts"] then
+          local lastAlerts = aUnit["lastAlerts"]
+          if type(lastAlerts[aType]) ~= "table" then
+            if debug then debugger("moveUnit 7. Setting givenTaken type. unitOrArmyObj["..tostring(aType).."]="..type(lastAlerts[aType])..", unitOrArmyObj="..type(baseObj)..", unitType="..tostring(aType)..", event="..tostring(event))end
+            lastAlerts[aType] = {}
+          end
+          if type(lastAlerts[aType][event]) ~= "table" then
+            lastAlerts[aType][event] = {}
+            lastAlerts[aType][event]["lastNotify"] = 0
+            lastAlerts[aType][event]["alertCount"] = 0
+            lastAlerts[aType][event]["isQueued"] = false
+            if debug then debugger("moveUnit 8. Setting givenTaken event vars. unitOrArmyObj["..tostring(aType).."]["..tostring(event).."]="..type(lastAlerts[aType][event])..", lastNotify="..tostring(lastAlerts[aType][event]["lastNotify"])..", alertCount="..tostring(lastAlerts[aType][event]["alertCount"])..", isQueued="..tostring(lastAlerts[aType][event]["isQueued"])..", name="..tostring(UnitDefs[self.defID].translatedHumanName)) end
+          end
+        end
+      end
+    end
+  end
+  local givenTaken
+  if teamsManager:isAllied(newTeamID) then  -- isSpectator
+    givenTaken = "given"
+    if debug or self.debug then debugger("moveUnit 9. Unit has been given. unitName=" .. tostring(UnitDefs[self.defID].translatedHumanName)) end
+  else
+    givenTaken = "taken"
+    if debug or self.debug then debugger("moveUnit 9. Unit has been taken. unitName=" .. tostring(UnitDefs[self.defID].translatedHumanName)) end
+  end
+  if givenTaken == "taken" then
+    if alertAllTaken then
+      if debug or self.debug then debugger("moveUnit 10. Unit has rule to alert when taken, unitName=" .. tostring(UnitDefs[self.defID].translatedHumanName)) end
+      teamsManager:addUnitToAlertQueue(aUnit, alertAllTakenRules)
+    else
+      local takenEvent = aUnit:getTypesRulesForEvent(givenTaken, true, false)
+      if takenEvent then
+        if debug or self.debug then debugger("moveUnit 10. Unit has rule to alert when taken, unitName=" .. tostring(UnitDefs[self.defID].translatedHumanName)) end
+        teamsManager:addUnitToAlertQueue(aUnit, takenEvent)
+      end
+    end
+  end
+
   aUnit:setLost(false)
   aUnit.parent = newTeamArmy
   newTeamArmy.units[unitID] = aUnit -- set here because it is only set in createUnit(), and setLost() removed from other army
   aUnit:setTypes(aUnit.defID)
   newTeamArmy.unitsReceived[aUnit.ID] = aUnit
+
+  -- Need to TEST
+  if givenTaken == "given" then
+    if alertAllGiven then
+      if debug or self.debug then debugger("moveUnit 8. Unit has rule alertAllGiven, unitName=" .. tostring(UnitDefs[self.defID].translatedHumanName)) end
+      teamsManager:addUnitToAlertQueue(aUnit, alertAllGivenRules)
+    else
+      local givenEvent = aUnit:getTypesRulesForEvent(givenTaken, true, false)
+      if givenEvent then
+        if debug or self.debug then debugger("moveUnit 10. Unit has rule to alert when given, unitName=" .. tostring(UnitDefs[self.defID].translatedHumanName)) end
+        teamsManager:addUnitToAlertQueue(aUnit, givenEvent)
+      end
+    end
+  end
+
   self.lastUpdate = Spring.GetGameSeconds()
   return aUnit
 end
@@ -913,6 +985,7 @@ function teamsManager:addUnitToAlertQueue(unitObj, typeEventRulesTbl) -- Use [un
     debugger("addUnitToAlertQueue 2. ERROR. Returning nil. Bad unit or rules table. unitObj.ID="..tostring(unitObj.ID)..", alertVarsTbl=" .. type(typeEventRulesTbl))
     return nil
   end
+  unitObj:getCoords() -- in case it dies before alert happens
   local alertVarsTbl = self:getEventRulesNotifyVars(unitObj, typeEventRulesTbl)
   if type(alertVarsTbl) ~= "table" then -- all is verified by getEventRulesNotifyVars()
     debugger("addUnitToAlertQueue 3. ERROR. Returning nil. getEventRulesNotifyVars() returned nil. alertVarsTbl=" .. type(alertVarsTbl))
@@ -1018,7 +1091,7 @@ function teamsManager:getEventRulesNotifyVars(unitObj,typeEventRulesTbl ) -- val
     unitType = aType
     for anEvent, aRulesTbl in pairs(eventsTbl) do
       eventCount = eventCount + 1
-      event = anEvent
+      event = anEvent 
       rulesTbl = aRulesTbl
     end
   end
@@ -1590,15 +1663,19 @@ function pUnit:setLost(destroyed) -- destroyed = true default
       teamsManager:addUnitToAlertQueue(self, destroyedEvent) -- {type = {event = {rules}}}
     end
   else
-    local takenEvent = self:getTypesRulesForEvent("taken", true, false)
-    if takenEvent then
-      if debug or self.debug then debugger("setLost 8. Unit has rule to alert when taken, unitName=" .. tostring(UnitDefs[self.defID].translatedHumanName)) end
-      teamsManager:addUnitToAlertQueue(self, takenEvent)
-    end
+    -- local takenEvent = self:getTypesRulesForEvent("taken", true, false)
+    -- if takenEvent then
+    --   if debug or self.debug then debugger("setLost 8. Unit has rule to alert when taken, unitName=" .. tostring(UnitDefs[self.defID].translatedHumanName)) end
+    --   teamsManager:addUnitToAlertQueue(self, takenEvent)
+    -- end
   end
   self.lost = Spring.GetGameSeconds()
   self.lastUpdate = Spring.GetGameSeconds()
-  return self
+  if deleteDestroyed then
+    self.parent["unitsLost"][self.ID] = nil
+  else
+    return self
+  end
 end
 
 -- Unused method, but could be handy later
@@ -1647,7 +1724,7 @@ function pUnit:setTypes()
       self.hasDamagedEvent = true
     end
     local baseObj = self
-    if type(eventsTbl) == "table" and eventsTbl["sharedAlerts"] == true then
+    if type(eventsTbl) == "table" and eventsTbl["sharedAlerts"] == true then -- Unnecessary now since below only does non-shared
       baseObj = baseObj.parent
       if isSpectator then
         baseObj = teamsManager
@@ -1825,6 +1902,9 @@ if debug then debugger("makeRelTeamDefsRules 1.") end
     if debug then debugger("makeRelTeamDefsRules TEST. Validating Spectator rules") end
     if type(trackSpectatorTypesRules) ~= "table" or not teamsManager:validTypeEventRulesTbls(trackSpectatorTypesRules) then return false end
   end
+  if alertAllTaken and (type(alertAllTakenRules) ~= "table" or not teamsManager:validTypeEventRulesTbls(alertAllTakenRules)) then return false end
+  if alertAllGiven and (type(alertAllGivenRules) ~= "table" or not teamsManager:validTypeEventRulesTbls(alertAllGivenRules)) then return false end
+  
   for unitDefID, unitDef in pairs(UnitDefs) do
     if not string.find(unitDef.name, 'critter') and not string.find(unitDef.name, 'raptor') and (not unitDef.modCategories or not unitDef.modCategories.object) then
       if unitDef.customParams.iscommander then
@@ -1927,8 +2007,13 @@ function widget:UnitDestroyed(unitID, defID, teamID, attackerID, attackerDefID, 
   if debug then debugger("widget:UnitDestroyed 1. Unit taken. unitID=" .. tostring(unitID) .. ", unitDefID=" ..tostring(defID) .. ", attackerID=" ..tostring(attackerID) .. ", attackerDefID=" ..tostring(attackerDefID) .. ", attackerTeam=" ..tostring(attackerTeam) .. ", translatedHumanName=" .. tostring(UnitDefs[defID].translatedHumanName)) end
   if debug then debugger("UnitDestroyed 2 unitID=" ..tostring(unitID) .. ", translatedHumanName=" .. tostring(UnitDefs[defID].translatedHumanName)) end
   local army = teamsManager:getArmyManager(teamID)
-  if army and army:hasTypeEventRules(defID, nil, "destroyed") then
-    army:getOrCreateUnit(unitID, defID):setLost() -- automatically alerts
+  if army then
+    local aUnit = army:getUnit(unitID)
+    if aUnit then
+      aUnit:setLost()
+    elseif army:hasTypeEventRules(defID, nil, "destroyed") then
+      army:getOrCreateUnit(unitID, defID):setLost() -- automatically alerts
+    end
   end
 end
 
@@ -1937,6 +2022,9 @@ function widget:UnitTaken(unitID, defID, oldTeamID, newTeamID) -- Taken or given
   if debug then debugger("widget:UnitTaken 1. Unit taken. unitID=" .. tostring(unitID) .. ", unitDefID=" ..tostring(defID)  .. ", oldTeamID=" ..tostring(oldTeamID) .. ", newTeamID=" ..tostring(newTeamID)) end
   if teamsManager:getArmyManager(oldTeamID):hasTypeEventRules(defID) or teamsManager:getArmyManager(newTeamID):hasTypeEventRules(defID) then
     local oldArmy = teamsManager:getArmyManager(oldTeamID)
+    -- if not isSpectator and newTeamID == myTeamID and oldArmy:isAllied(newTeamID) then -- "given"
+
+    -- end
     if oldArmy then
       local aUnit = oldArmy:getOrCreateUnit(unitID, defID)
       if aUnit then
@@ -2019,7 +2107,7 @@ local function checkPersistentEvents()
       if type(anArmyManager["thresholdHP"]) == "table" then
         for unitID, unit in pairs(anArmyManager["thresholdHP"]) do
           if Spring.GetUnitIsDead(unitID) then
-            if true then debugger("checkPersistentEvents 5. Removing Dead Unit.") end
+            if debug then debugger("checkPersistentEvents 5. Removing Dead Unit.") end
             deadUnits[unitID] = unit
           else
             if debug then debugger("checkPersistentEvents 5. Checking thresholdHP. unitID=" ..tostring(unitID) .. ", defID=" ..tostring(unit.defID) .. ", teamID=" .. tostring(unit.parent.teamID) .. ", translatedHumanName=" .. tostring(UnitDefs[unit.defID].translatedHumanName)) end
