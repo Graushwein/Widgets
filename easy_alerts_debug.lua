@@ -1,8 +1,8 @@
-local widgetName = "Test"
+local widgetName = "Easy_Alerts"
 function widget:GetInfo()
 	return {
 		name = widgetName,
-		desc = "Test",
+		desc = "Allows players and spectators to get customized unit-event alerts.",
 		author = "Graushwein",
 		date = "May 29, 2025",
 		license = "GNU GPL, v2 or later",
@@ -10,165 +10,81 @@ function widget:GetInfo()
 		enabled = true,
 	}
 end
--- TODO: make separate lua files. VFS: https://springrts.com/wiki/Lua_VFS
--- TODO: make so only widgets needed are imported
--- When maxAlerts met using sharedAlerts, remove rule to keep new units being loaded, but don't worry about the existing units... until much later
 -- ################################################# Config variables starts here #################################################
 local soundVolume = 1.0 -- Set the volume between 0.0 and 1.0. NOT USED
 
-local UpdateInterval = 30 -- 30 runs once per second, 1=30/sec, 60=1/2sec
+local updateInterval = 30 -- 30 runs once per second, 1=30/sec, 60=1/2sec
 local minReAlertSec = 3 -- to prevent a bunch at once
-local deleteDestroyed = false
+local deleteDestroyed = false -- For possible RAM concerns. Though, in the few small tests I tried it didn't seem to save more RAM
 
-local alertAllTaken = false
+local alertAllTaken = false -- NOT TESTED YET
 local alertAllTakenRules = {anyTaken = {["alertAllTaken"] = {sharedAlerts=true, reAlertSec=3, mark="Unit Taken"}}} -- KEEP "sharedAlerts=true", else this can SPAM
 local alertAllGiven = false
 local alertAllGivenRules = {anyGiven = {["alertAllGiven"] = {sharedAlerts=true, reAlertSec=3, mark="Unit Given"}}} -- KEEP "sharedAlerts=true", else this can SPAM
 
--- Newly added event events/rules will need to be added here
-local validEvents = {"created","finished","idle","destroyed","los","thresholdHP","taken","given","damaged","loaded","stockpile"} -- TODO: ,"enteredAir","attacks"
-local validEventRules = {"sharedAlerts", "priority", "reAlertSec", "maxAlerts", "alertDelay", "maxQueueTime", "alertSound", "mark", "ping","messageTo","messageTxt", "threshMinPerc"} -- TODO: , "threshMaxPerc" with economy
--- most validEventRules are used in getEventRulesNotifyVars(typeEventRulesTbl, unitObj)
--- mark = only you see. ping = ALL ALLIES see it. Be careful with ping
--- Priority from 0-99999, decimals okay, default 5. 0 ignores minSecsBetweenNotifications and will notify immediately
--- When a unit has 2+ types, both with rules for the same event (like idle), the event with the highest priority is always used, (TODO: unless the other is already queued). If all have same priority, probably randomly chosen
+-- ######## ReadMe instructions: https://github.com/Graushwein/Widgets/blob/main/README.md
 
--- TODO: create rules for below types in makeRelTeamDefsRules()  #####################
--- TODO: Maybe make threshold a rule instead of event?
+-- NOTICE: All text is case sensitive!
+-- Unit Events = {"created","finished","idle","destroyed","los","thresholdHP","taken","given","damaged","loaded","stockpile"}
+-- Event Rules = {"sharedAlerts", "priority", "reAlertSec", "maxAlerts", "alertDelay", "maxQueueTime", "alertSound", "mark", "ping","messageTo","messageTxt", "threshMinPerc"} -- TODO: , "threshMaxPerc" with economy
 
--- How to add new unit unitTypes: (names not validated)
-  -- Copy/paste a type line below, like "local myMexRules...", change to "exampleRules" varName to be unique and configure the rules using the many examples
-  -- Below in one of the 3 appropriate "track[team]TypesRules", like trackMyTypesRules, add another line like, "example = exampleRules"
-  -- In makeRelTeamDefsRules(), add the appropriate "if" statement for the units and use addToRelTeamDefsRules(unitDefID, "example")
-
--- How to add new events:
-  -- Add it to validEvents above, like "exampleEvent". Case-sensitive everywhere
-  -- Use it in function/widget, like "widget:UnitIdle()", and do anArmy:hasTypeEventRules(defID, nil, "exampleEvent"), then tell it what to do next, like addUnitToAlertQueue()
-
-  -- How to add new rules:
-    -- Add it to validEventRules above, like "exampleRule". Case-sensitive everywhere
-    -- Add it to the return values at the end of getEventRulesNotifyVars() following the examples on that line
-    -- Add its validation rules in validTypeEventRulesTbls() following the examples
-    -- TIP: Most rules are processed in the methods that have "alert" and "queue" in their names
-
--- multiple event rules allowed, but must be unique. Example: myCommanderRules can'the have 2 "idle", but can have all events: idle, damaged, and finished...
--- units can have multiple types, like making the commander also have the constructor type. makeRelTeamDefsRules() is used to do that.
--- {unitType = {event = {rules}}}
-local myCommanderRules = {damaged = {reAlertSec=30, mark=nil, alertSound="sounds/commands/cmd-selfd.wav"}, thresholdHP = {reAlertSec=60, mark="Commander In Danger", alertSound="sounds/commands/cmd-selfd.wav", threshMinPerc=.6, priority=0}} -- idle = {maxAlerts=0, reAlertSec=15, mark=nil, alertSound="sounds/commands/cmd-selfd.wav"},  will sound alert when Commander idle/15 secs, (re)damaged once per 30 seconds (unlimited), and when damage causes HP to be under 50%
-local myConstructorRules = {idle = {sharedAlerts=true, maxAlerts=0, reAlertSec=20, alertDelay=.1, mark="Constructor Idle", alertSound="sounds/commands/cmd-selfd.wav"}, destroyed = {maxAlerts=0, reAlertSec=1, mark="Con Lost", alertSound=nil}}
-local myFactoryRules = {idle = {reAlertSec=15, alertDelay=.1, mark="Factory Idle", alertSound="sounds/commands/cmd-selfd.wav"}}
-local myRezBotRules = {idle = {sharedAlerts=true, reAlertSec=15, alertDelay=.1, mark="RezBot Idle", messageTo="me",messageTxt="messageTxt"}}
-local myMexRules = {destroyed = {reAlertSec=3, mark="Mex Lost"}, taken = {reAlertSec=3, mark="Mex Taken"}}
-local myEnergyGenRules = {} -- reAlertSec only used if mark/sound wanted. Saved so custom code can do something with the information.
-local myRadarRules = {}
-local mygroundT2Rules = {} -- damaged = {maxAlerts=0, reAlertSec=30, mark="Damaged", alertSound="sounds/commands/cmd-selfd.wav"}, thresholdHP = {maxAlerts=0, reAlertSec=60, mark="Threshold Met", alertSound="sounds/commands/cmd-selfd.wav", threshMinPerc=.8, priority=0}
-
--- Premade Unit Types to use: commander,constructor,factory,factoryT1,factoryT2,factoryT3,rezBot,
+-- Premade Unit Types: commander,constructor,factory,factoryT1,factoryT2,factoryT3,rezBot,
   -- mex,mexT1,mexT2,energyGen,energyGenT1,energyGenT2,radar,nuke,antiNuke,allMobileUnits,unitsT1,unitsT2,unitsT3,
   -- hoverUnits,waterUnits,waterT1,waterT2,waterT3,groundUnits,groundT1,groundT2,groundT3,airUnits,airT1,airT2,airT3
+-- {unitType = {event = {rules}}}
+-- NOTICE: I recommend using "thresholdHP" instead of "damaged" events. "damaged" are disabled by default, for very late game performance concerns. (I haven't done any testing though.) To enable, go to "function widget:UnitDamaged(" and remove the "--" from all lines in the function block
+local myCommanderRules = {thresholdHP = {reAlertSec=60, mark="Commander In Danger", alertSound="sounds/commands/cmd-selfd.wav", threshMinPerc=.6, priority=0}} -- damaged = {reAlertSec=30} Towards the end of games there's a lot of damage, so I recommend using "thresholdHP" for the few units you care about -- will sound alert when Commander idle/15 secs, (re)damaged once per 30 seconds (unlimited), and when damage causes HP to be under x%
+local myConstructorRules = {idle = {sharedAlerts=true, reAlertSec=20, mark="Idle Con", alertDelay=.1}, destroyed = {mark="Con Lost"}, given = {mark="Con Given"}}
+local myFactoryRules = {idle = {sharedAlerts=true, reAlertSec=20, mark="Idle Factory", alertDelay=.1}}
+local myRezBotRules = {idle = {sharedAlerts=true, reAlertSec=20, alertDelay=.1, messageTo="me",messageTxt="RezBot Idle"}}
+local myMexRules = {destroyed = {reAlertSec=5, mark="Mex Lost"}, taken = {mark="Mex Taken"}}
+local myRadarRules = {destroyed = {mark="Radar Lost"}}
+local myNukeRules = {stockpile = {messageTo="me", messageTxt="Nuke Ready", mark="Nuke Ready", alertSound="sounds/commands/cmd-selfd.wav"}}
+-- More Unit Types:
+local myEnergyGenT2Rules = {}; local myAntiNukeRules = {}; local myFactoryT1Rules = {}; local myFactoryT2Rules = {}; local myFactoryT3Rules = {}; local myMexT1Rules = {}; local myMexT2Rules = {}; local myEnergyGenRules = {}; local myEnergyGenT1Rules = {}; local myAllMobileUnitsRules = {}; local myUnitsT1Rules = {}; local myUnitsT2Rules = {}; local myUnitsT3Rules = {}; local myHoverUnitsRules = {}; local myWaterUnitsRules = {}; local myWaterT1Rules = {}; local myWaterT2Rules = {}; local myWaterT3Rules = {}; local myGroundUnitsRules = {}; local myGroundT1Rules = {}; local myGroundT2Rules = {}; local myGroundT3Rules = {}; local myAirUnitsRules = {}; local myAirT1Rules = {}; local myAirT2Rules = {}; local myAirT3Rules = {}
+local trackMyTypesRules = {commander = myCommanderRules, constructor = myConstructorRules, factory = myFactoryRules, rezBot = myRezBotRules,	mex = myMexRules, energyGenT2 = myEnergyGenT2Rules,radar = myRadarRules, nuke = myNukeRules, antiNuke = myAntiNukeRules, factoryT1 = myFactoryT1Rules, factoryT2 = myFactoryT2Rules, factoryT3 = myFactoryT3Rules, mexT1 = myMexT1Rules, mexT2 = myMexT2Rules, energyGen = myEnergyGenRules, energyGenT1 = myEnergyGenT1Rules, allMobileUnits = myAllMobileUnitsRules, unitsT1 = myUnitsT1Rules, unitsT2 = myUnitsT2Rules, unitsT3 = myUnitsT3Rules, hoverUnits = myHoverUnitsRules, waterUnits = myWaterUnitsRules, waterT1 = myWaterT1Rules, waterT2 = myWaterT2Rules, waterT3 = myWaterT3Rules, groundUnits = myGroundUnitsRules, groundT1 = myGroundT1Rules, groundT2 = myGroundT2Rules, groundT3 = myGroundT3Rules, airUnits = myAirUnitsRules, airT1 = myAirT1Rules, airT2 = myAirT2Rules, airT3 = myAirT3Rules}
 
--- local myRules = 
-local trackMyTypesRules = {
-	commander = myCommanderRules,
-  constructor = myConstructorRules,
-  factory = myFactoryRules,
-  rezBot = myRezBotRules,
-	mex = myMexRules,
-	energyGen = myEnergyGenRules,
-	radar = myRadarRules,
-  groundT2 = mygroundT2Rules
-}
+-- allyRules
 local allyCommanderRules = {} -- Must have a rule to make it track the units. No alert means it only destroyed enemy mex will be tracked. To have it track alive mex, use "los"
-local allyConstructorRules = {}
-local allyFactoryRules = {}
-local allyFactoryT2Rules = {finished = {maxAlerts=1, reAlertSec=15, mark="T2 Ally", alertSound=nil, messageTo="allies",messageTxt="T2 Con Plz!"}} -- So you know to badger them for a T2 constructor ;)
-local allyRezBotRules = {}
-local allyMexRules = {destroyed = {maxAlerts=0, reAlertSec=1, mark="Ally Mex Lost", alertSound=nil}, finished = {maxAlerts=1, reAlertSec=15, mark="Ally Mex finished", alertSound=nil, messageTo="allies",messageTxt="Ally Mex finished"}}
-local allyEnergyGenRules = {}
-local allyRadarRules = {}
--- local allyRules = 
-local trackAllyTypesRules = {
-  commander = allyCommanderRules,
-  constructor = allyConstructorRules,
-  factory = allyFactoryRules,
-  factoryT2 = allyFactoryT2Rules,
-  rezBot = allyRezBotRules,
-	mex = allyMexRules,
-	energyGen = allyEnergyGenRules,
-	radar = allyRadarRules
-}
-local enemyCommanderRules = {los = {maxAlerts=0, reAlertSec=30, mark="Commander", alertSound=nil, priority=0, messageTo="all",messageTxt="Get em!"} } -- will mark "Commander" at location when (re)enters LoS, once per 30 seconds (unlimited)
-local enemyConstructorRules = {}
-local enemyFactoryRules = {}
-local enemyFactoryT2Rules = {los = {maxAlerts=1, reAlertSec=15, mark="T2 enemy", alertSound=nil}} -- Hope you're ready.
-local enemyRezBotRules = {}
-local enemyMexRules = {destroyed = {maxAlerts=0, reAlertSec=1, mark=nil, alertSound=nil}}
-local enemyEnergyGenRules = {}
-local enemyRadarRules = {}
-local enemyUnitsT2Rules = {}
-local enemyUnitsT3Rules = {}
-local enemyUnitsAirT1Rules = {}
-local enemyUnitsAirT2Rules = {}
-local enemyNukeRules = {los = {sharedAlerts=true, maxAlerts=1, reAlertSec=1, mark="Nuke Spotted"}}
+local allyFactoryT2Rules = {finished = {sharedAlerts=true, maxAlerts=1, mark="T2 Ally Factory", alertDelay=30, messageTo="me", messageTxt="T2 Ally"}} -- So you can badger them for a T2 constructor ;)
+local allyMexRules = {destroyed = {sharedAlerts=true, mark="Ally Mex Lost", alertDelay=30}}
+local allyEnergyGenT2Rules = {destroyed = {sharedAlerts=true, mark="Ally Fusion Lost", alertDelay=30}}
+local allyRadarRules = {destroyed = {sharedAlerts=true, mark="Ally Radar Lost", alertDelay=30}}
+local allyNukeRules = {stockpile = {sharedAlerts=true, alertDelay=30, messageTo="me", messageTxt="Ally Nuke Ready", alertSound="sounds/commands/cmd-selfd.wav"}}
+
+local allyRezBotRules = {}; local allyFactoryRules = {}; local allyConstructorRules = {}; local allyAntiNukeRules = {}; local allyFactoryT1Rules = {}; local allyFactoryT3Rules = {}; local allyMexT1Rules = {}; local allyMexT2Rules = {}; local allyEnergyGenRules = {}; local allyEnergyGenT1Rules = {}; local allyAllMobileUnitsRules = {}; local allyUnitsT1Rules = {}; local allyUnitsT2Rules = {}; local allyUnitsT3Rules = {}; local allyHoverUnitsRules = {}; local allyWaterUnitsRules = {}; local allyWaterT1Rules = {}; local allyWaterT2Rules = {}; local allyWaterT3Rules = {}; local allyGroundUnitsRules = {}; local allyGroundT1Rules = {}; local allyGroundT2Rules = {}; local allyGroundT3Rules = {}; local allyAirUnitsRules = {}; local allyAirT1Rules = {}; local allyAirT2Rules = {}; local allyAirT3Rules = {}
+local trackAllyTypesRules = {commander = allyCommanderRules, constructor = allyConstructorRules, factory = allyFactoryRules, factoryT2 = allyFactoryT2Rules, rezBot = allyRezBotRules, mex = allyMexRules, energyGenT2 = allyEnergyGenT2Rules, radar = allyRadarRules, nuke = allyNukeRules, antiNuke = allyAntiNukeRules, factoryT1 = allyFactoryT1Rules, factoryT3 = allyFactoryT3Rules, mexT1 = allyMexT1Rules, mexT2 = allyMexT2Rules, energyGen = allyEnergyGenRules, energyGenT1 = allyEnergyGenT1Rules, allMobileUnits = allyAllMobileUnitsRules, unitsT1 = allyUnitsT1Rules, unitsT2 = allyUnitsT2Rules, unitsT3 = allyUnitsT3Rules, hoverUnits = allyHoverUnitsRules, waterUnits = allyWaterUnitsRules, waterT1 = allyWaterT1Rules, waterT2 = allyWaterT2Rules, waterT3 = allyWaterT3Rules, groundUnits = allyGroundUnitsRules, groundT1 = allyGroundT1Rules, groundT2 = allyGroundT2Rules, groundT3 = allyGroundT3Rules, airUnits = allyAirUnitsRules, airT1 = allyAirT1Rules, airT2 = allyAirT2Rules, airT3 = allyAirT3Rules}
+
+-- enemyRules
+local enemyCommanderRules = {los = {reAlertSec=60, mark="Commander", priority=0, messageTo="me",messageTxt="Get em!"} } -- will mark "Commander" at location when (re)enters LoS, once per 30 seconds (unlimited)
+local enemyFactoryT2Rules = {los = {sharedAlerts=true, maxAlerts=1, mark="T2 enemy"}} -- Hope you're ready.
 local enemyAntiNukeRules = {los = {sharedAlerts=true, maxAlerts=1, reAlertSec=1, mark="AntiNuke Spotted"}}
--- local enemyRules = {}
-local trackEnemyTypesRules = {
-	commander = enemyCommanderRules,
-  constructor = enemyConstructorRules,
-  factory = enemyFactoryRules,
-  factoryT2 = enemyFactoryT2Rules,
-  rezBot = enemyRezBotRules,
-	mex = enemyMexRules,
-	energyGen = enemyEnergyGenRules,
-	radar = enemyRadarRules,
-	unitsT2 = enemyUnitsT2Rules,
-	unitsT3 = enemyUnitsT3Rules,
-	airT1 = enemyUnitsAirT1Rules,
-	airT2 = enemyUnitsAirT2Rules,
-	nuke = enemyNukeRules,
-	antinuke = enemyAntiNukeRules
-}
--- For spectator: could make sharedAlerts=all/team so can have shared team alerts...
-local spectatorCommanderRules = {thresholdHP = {reAlertSec=30, threshMinPerc=.6, mark="Commander In Danger", alertSound="sounds/commands/cmd-selfd.wav", priority=1}, loaded = {reAlertSec=3, mark="Com-Drop", alertSound="sounds/commands/cmd-selfd.wav", priority=1}}
-local spectatorConstructorRules = {idle = {sharedAlerts=true, reAlertSec=60, alertDelay=.1, mark="Idle Con"}, destroyed = {sharedAlerts=true, reAlertSec=30, mark="Con Destroyed"}}
-local spectatorFactoryRules = {}
-local spectatorFactoryT2Rules = {created = {sharedAlerts=true, reAlertSec=5, mark="T2 Factory Started"}, finished = {sharedAlerts=true, maxAlerts=6, reAlertSec=3, mark="T2 Factory Finished"}}
-local spectatorFactoryT3Rules = {created = {mark="T3 Factory Started", alertSound="sounds/commands/cmd-selfd.wav"}, finished = {reAlertSec=1, mark="T3 Factory Finished", alertSound="sounds/commands/cmd-selfd.wav"}}
-local spectatorRezBotRules = {}
-local spectatorMexRules = {}
-local spectatorMexT2Rules = {created = {sharedAlerts=true, reAlertSec=30, mark="MexT2 Started"}, damaged = {reAlertSec=15, mark="MexT2 Damaged"}}
-local spectatorEnergyGenRules = {}
-local spectatorEnergyGenT2Rules = {created = {reAlertSec=1, mark="EnergyT2 Started"}, damaged = {reAlertSec=15, mark="EnergyGenT2 Damaged", alertSound="sounds/commands/cmd-selfd.wav"}}
-local spectatorRadarRules = {finished = {sharedAlerts=true, maxAlerts=20, reAlertSec=30, mark="Radar Finished"}}
-local spectatorUnitsT2Rules = {}
-local spectatorUnitsT3Rules = {finished = {reAlertSec=10, mark="T3 Unit Finished"}, thresholdHP = {reAlertSec=60, mark="T3 Threshold", threshMinPerc=.5, priority=2, alertSound="sounds/commands/cmd-selfd.wav"}}
-local spectatorUnitsAirT1Rules = {}
-local spectatorUnitsAirT2Rules = {}
-local spectatorNukeRules = {stockpile = {reAlertSec=3, mark="Nuke Ready"}, created = {reAlertSec=1, mark="Nuke Started", alertSound="sounds/commands/cmd-selfd.wav"}, finished = {reAlertSec=1, mark="Nuke Finished", alertSound="sounds/commands/cmd-selfd.wav"}}
-local spectatorAntiNukeRules = {created = {reAlertSec=1, mark="Antinuke Started", alertSound="sounds/commands/cmd-selfd.wav"}, finished = {reAlertSec=1, mark="AntiNuke Finished", alertSound="sounds/commands/cmd-selfd.wav"}}
--- local spectatorRules = {}
-local trackSpectatorTypesRules = {
-	commander = spectatorCommanderRules,
-  constructor = spectatorConstructorRules,
-  factory = spectatorFactoryRules,
-  factoryT2 = spectatorFactoryT2Rules,
-  factoryT3 = spectatorFactoryT3Rules,
-  rezBot = spectatorRezBotRules,
-	mex = spectatorMexRules,
-	mexT2 = spectatorMexT2Rules,
-	energyGen = spectatorEnergyGenRules,
-	energyGenT2 = spectatorEnergyGenT2Rules,
-	radar = spectatorRadarRules,
-	unitsT2 = spectatorUnitsT2Rules,
-	unitsT3 = spectatorUnitsT3Rules,
-	airT1 = spectatorUnitsAirT1Rules,
-	airT2 = spectatorUnitsAirT2Rules,
-	nuke = spectatorNukeRules,
-	antinuke = spectatorAntiNukeRules
-}
+local enemyNukeRules = {los = {sharedAlerts=true, maxAlerts=1, reAlertSec=1, mark="Nuke Spotted"}}
+
+local enemyConstructorRules = {}; local enemyRadarRules = {}; local enemyUnitsT2Rules = {}; local enemyUnitsT3Rules = {}; local enemyFactoryRules = {}; local enemyMexRules = {}; local enemyEnergyGenT2Rules = {}; local enemyRezBotRules = {}; local enemyFactoryT1Rules = {}; local enemyFactoryT3Rules = {}; local enemyMexT1Rules = {}; local enemyMexT2Rules = {}; local enemyEnergyGenRules = {}; local enemyEnergyGenT1Rules = {}; local enemyAllMobileUnitsRules = {}; local enemyUnitsT1Rules = {}; local enemyHoverUnitsRules = {}; local enemyWaterUnitsRules = {}; local enemyWaterT1Rules = {}; local enemyWaterT2Rules = {}; local enemyWaterT3Rules = {}; local enemyGroundUnitsRules = {}; local enemyGroundT1Rules = {}; local enemyGroundT2Rules = {}; local enemyGroundT3Rules = {}; local enemyAirUnitsRules = {}; local enemyAirT1Rules = {}; local enemyAirT2Rules = {}; local enemyAirT3Rules = {}
+local trackEnemyTypesRules = {commander = enemyCommanderRules, constructor = enemyConstructorRules, rezBot = enemyRezBotRules, radar = enemyRadarRules, nuke = enemyNukeRules, antiNuke = enemyAntiNukeRules, factory = enemyFactoryRules, factoryT1 = enemyFactoryT1Rules, factoryT2 = enemyFactoryT2Rules, factoryT3 = enemyFactoryT3Rules, mex = enemyMexRules, mexT1 = enemyMexT1Rules, mexT2 = enemyMexT2Rules, energyGen = enemyEnergyGenRules, energyGenT1 = enemyEnergyGenT1Rules, energyGenT2 = enemyEnergyGenT2Rules, allMobileUnits = enemyAllMobileUnitsRules, unitsT1 = enemyUnitsT1Rules, unitsT2 = enemyUnitsT2Rules, unitsT3 = enemyUnitsT3Rules, hoverUnits = enemyHoverUnitsRules, waterUnits = enemyWaterUnitsRules, waterT1 = enemyWaterT1Rules, waterT2 = enemyWaterT2Rules, waterT3 = enemyWaterT3Rules, groundUnits = enemyGroundUnitsRules, groundT1 = enemyGroundT1Rules, groundT2 = enemyGroundT2Rules, groundT3 = enemyGroundT3Rules, airUnits = enemyAirUnitsRules, airT1 = enemyAirT1Rules, airT2 = enemyAirT2Rules, airT3 = enemyAirT3Rules}
+
+-- spectatorRules
+local spectatorCommanderRules = {thresholdHP = {reAlertSec=30, threshMinPerc=.6, mark="Commander In Danger", alertSound="sounds/commands/cmd-selfd.wav", priority=1}, loaded = {mark="Com-Drop", alertSound="sounds/commands/cmd-selfd.wav", priority=1}}
+local spectatorConstructorRules = {} -- {idle = {sharedAlerts=true, reAlertSec=60, alertDelay=.1, mark="Idle Con"}, destroyed = {sharedAlerts=true, reAlertSec=30, mark="Con Destroyed"}}
+local spectatorFactoryT2Rules = {created = {sharedAlerts=true, maxAlerts=3, mark="T2 Factory Started"}, finished = {sharedAlerts=true, maxAlerts=3, mark="T2 Factory Finished"}}
+local spectatorFactoryT3Rules = {created = {sharedAlerts=true, maxAlerts=3, mark="T3 Factory Started", alertSound="sounds/commands/cmd-selfd.wav"}, finished = {sharedAlerts=true, maxAlerts=3, mark="T3 Factory Finished", alertSound="sounds/commands/cmd-selfd.wav"}}
+local spectatorMexT2Rules = {created = {sharedAlerts=true, maxAlerts=1, reAlertSec=30, mark="MexT2 Started"}, thresholdHP = {sharedAlerts=true, threshMinPerc=.8, reAlertSec=60, mark="MexT2 Damaged"}}
+local spectatorEnergyGenT2Rules = {created = {sharedAlerts=true, maxAlerts=3, mark="EnergyT2 Started"}, thresholdHP = {sharedAlerts=true, threshMinPerc=.8, reAlertSec=60, mark="EnergyGenT2 Damaged"}}
+local spectatorRadarRules = {finished = {sharedAlerts=true, maxAlerts=5, reAlertSec=60, mark="Radar Finished"}}
+local spectatorNukeRules = {stockpile = {sharedAlerts=true, maxAlerts=5, mark="Nuke Ready"}, created = {sharedAlerts=true, mark="Nuke Started", alertSound="sounds/commands/cmd-selfd.wav"}, finished = {reAlertSec=1, mark="Nuke Finished", alertSound="sounds/commands/cmd-selfd.wav"}}
+local spectatorAntiNukeRules = {created = {sharedAlerts=true, maxAlerts=5, mark="Antinuke Started"}, finished = {sharedAlerts=true, maxAlerts=5, mark="AntiNuke Finished"}}
+
+local spectatorFactoryRules = {}; local spectatorRezBotRules = {}; local spectatorMexRules = {}; local spectatorUnitsT2Rules = {}; local spectatorUnitsT3Rules = {}; local spectatorFactoryT1Rules = {}; local spectatorMexT1Rules = {}; local spectatorEnergyGenRules = {}; local spectatorEnergyGenT1Rules = {}; local spectatorAllMobileUnitsRules = {}; local spectatorUnitsT1Rules = {}; local spectatorHoverUnitsRules = {}; local spectatorWaterUnitsRules = {}; local spectatorWaterT1Rules = {}; local spectatorWaterT2Rules = {}; local spectatorWaterT3Rules = {}; local spectatorGroundUnitsRules = {}; local spectatorGroundT1Rules = {}; local spectatorGroundT2Rules = {}; local spectatorGroundT3Rules = {}; local spectatorAirUnitsRules = {}; local spectatorAirT1Rules = {}; local spectatorAirT2Rules = {}; local spectatorAirT3Rules = {}
+local trackSpectatorTypesRules = {commander = spectatorCommanderRules, constructor = spectatorConstructorRules, rezBot = spectatorRezBotRules, radar = spectatorRadarRules, nuke = spectatorNukeRules, antiNuke = spectatorAntiNukeRules, factory = spectatorFactoryRules, factoryT1 = spectatorFactoryT1Rules, factoryT2 = spectatorFactoryT2Rules, factoryT3 = spectatorFactoryT3Rules, mex = spectatorMexRules, mexT1 = spectatorMexT1Rules, mexT2 = spectatorMexT2Rules, energyGen = spectatorEnergyGenRules, energyGenT1 = spectatorEnergyGenT1Rules, energyGenT2 = spectatorEnergyGenT2Rules, allMobileUnits = spectatorAllMobileUnitsRules, unitsT1 = spectatorUnitsT1Rules, unitsT2 = spectatorUnitsT2Rules, unitsT3 = spectatorUnitsT3Rules, hoverUnits = spectatorHoverUnitsRules, waterUnits = spectatorWaterUnitsRules, waterT1 = spectatorWaterT1Rules, waterT2 = spectatorWaterT2Rules, waterT3 = spectatorWaterT3Rules, groundUnits = spectatorGroundUnitsRules, groundT1 = spectatorGroundT1Rules, groundT2 = spectatorGroundT2Rules, groundT3 = spectatorGroundT3Rules, airUnits = spectatorAirUnitsRules, airT1 = spectatorAirT1Rules, airT2 = spectatorAirT2Rules, airT3 = spectatorAirT3Rules}
+
 -- ################################################## Config variables ends here ##################################################
 -- DONT change code below this if you are not sure what you are doing
--- the above helps populate below when widget started
+
+-- Newly added event events/rules will need to be added here
+-- most validEventRules are used in getEventRulesNotifyVars(typeEventRulesTbl, unitObj)
+local validEvents = {"created","finished","idle","destroyed","los","thresholdHP","taken","given","damaged","loaded","stockpile"}
+local validEventRules = {"sharedAlerts", "priority", "reAlertSec", "maxAlerts", "alertDelay", "maxQueueTime", "alertSound", "mark", "ping","messageTo","messageTxt", "threshMinPerc"} -- TODO: , "threshMaxPerc" with economy
 local relevantMyUnitDefsRules = {} -- unitDefID (key), typeArray {commander,builder} Types match to types above --  -- {defID = {type = {event = {rules}}}}
 local relevantAllyUnitDefsRules = {} -- unitDefs wanted in ally armyManagers
 local relevantEnemyUnitDefsRules = {} -- unitDefs wanted in enemy armyManagers
@@ -178,10 +94,8 @@ local isEnabledDamagedWidget = false -- This will toggle itself if widget:UnitDa
 local debug = false
 local spGetUnitDefID= Spring.GetUnitDefID
 local spGetUnitTeam = Spring.GetUnitTeam
-local spGetCommandQueue     = Spring.GetCommandQueue
--- Deprecated: Getting the command count using GetUnitCommands/GetCommandQueue is deprecated. Please use Spring.GetUnitCommandCount instead.
+local spGetCommandQueue = Spring.GetCommandQueue -- Deprecated: Getting the command count using GetUnitCommands/GetCommandQueue is deprecated. Please use Spring.GetUnitCommandCount instead.
 local spGetFactoryCommands = Spring.GetFactoryCommands
-
 local TestSound = 'sounds/commands/cmd-selfd.wav'
 
 table.insert(validEventRules,"lastNotify") -- add system only rules
@@ -624,7 +538,7 @@ function teamsManager:getArmyManager(teamID) -- Returns existing ArmyManager (ch
   if not teamsManager:validIDs(nil, nil, nil, nil, true, teamID, nil, nil, nil, nil) then debugger("getArmyManager 2. INVALID input. Returning nil.") return nil end
   local anArmy = self.armies[teamID]
   if type(anArmy) == "nil" then
-    debugger("getArmyManager 3. ERROR, shouldn't happen. Returning (Nil because teamID=" .. tostring(teamID) .. " not found) anArmy Type=" .. type(anArmy))
+    if debug or self.debug then debugger("getArmyManager 3. ERROR, shouldn't happen. Returning (Nil because teamID=" .. tostring(teamID) .. " not found) anArmy Type=" .. type(anArmy)) end
     return nil
   end
   if debug or self.debug then debugger("getArmyManager 4. Found and returning anArmy Type=" .. type(anArmy) .. ", teamID=" .. tostring(self.armies[teamID].teamID)) end
@@ -1333,14 +1247,14 @@ function pArmyManager:createUnit(unitID, defID) -- this has two return types: ni
   self.lastUpdate = gameSecs
   aUnit.lastUpdate = gameSecs
   aUnit.lastSetIdle = gameSecs - 5
-  local eventTble = aUnit:getTypesRulesForEvent("created", true, false)
-  if type(eventTble) == "table" then
-    if debug then debugger("createUnit 9. Has rules for created. Sending to addUnitToAlertQueue(). unitID=" .. type(aUnit.unitID) .. ", unitDefID=" .. type(aUnit.defID) .. ", teamID=" .. type(self.teamID)) end
-    teamsManager:addUnitToAlertQueue(aUnit, eventTble)
-  end
   local health, maxHealth, paralyzeDamage, captureProgress, buildProgress = Spring.GetUnitHealth(aUnit.ID)
   if type(health) == "number" then
     aUnit.health = {["HP"]=health, ["maxHP"]=maxHealth, ["paralyzeDamage"]=paralyzeDamage, ["captureProgress"]=captureProgress, ["buildProgress"]=buildProgress}
+  end
+  local eventTble = aUnit:getTypesRulesForEvent("created", true, false)
+  if buildProgress and buildProgress == 1 and type(eventTble) == "table" then
+    if debug then debugger("createUnit 9. Has rules for created. Sending to addUnitToAlertQueue(). unitID=" .. type(aUnit.unitID) .. ", unitDefID=" .. type(aUnit.defID) .. ", teamID=" .. type(self.teamID)) end
+    teamsManager:addUnitToAlertQueue(aUnit, eventTble)
   end
   if debug or self.debug then debugger("createUnit 10. aUnit.ID=" .. tostring(aUnit.ID) .. ", aUnit.defID=" .. tostring(aUnit.defID) .. ", aUnit.teamID=" .. tostring(aUnit.parent.teamID) .. ", translatedHumanName=" .. tostring(UnitDefs[defID].translatedHumanName)) end
   return aUnit
@@ -2008,7 +1922,7 @@ function widget:UnitFinished(unitID, defID, teamID, builderID) -- Finished being
     if finishedEvent then
       teamsManager:addUnitToAlertQueue(aUnit, finishedEvent)
     end
-    aUnit:getIdle()
+    aUnit:getIdle() -- automatically alerts
   end
 end
 
@@ -2037,7 +1951,7 @@ function widget:UnitEnteredLos(unitID, teamID, allyTeam, defID) -- Called when a
   end
 end
 
-local function checkPersistentEvents()
+local function checkPersistentEvents() -- Checks all of the events that BAR widgets don't cover
   if debug then debugger("checkPersistentEvents 1.") end
   local armiesToCheck
   if isSpectator then
@@ -2048,7 +1962,7 @@ local function checkPersistentEvents()
     armiesToCheck = {myTeamID = teamsManager.myArmyManager}
   end
   local deadUnits = {} -- ensure dead units get removed from persistently checked tables
-  for aTeamID, anArmyManager in pairs(armiesToCheck) do
+  for _, anArmyManager in pairs(armiesToCheck) do
     if not anArmyManager.isGaia then
       if type(anArmyManager["idle"]) == "table" then
         for unitID, unit in pairs(anArmyManager["idle"]) do
@@ -2081,28 +1995,30 @@ local function checkPersistentEvents()
       -- Next phase - non-unit events
       -- anArmyManager.resources["metal"]["currentLevel"], anArmyManager.resources["metal"]["storage"], anArmyManager.resources["metal"]["pull"], anArmyManager.resources["metal"]["income"], anArmyManager.resources["metal"]["expense"], anArmyManager.resources["metal"]["share"], anArmyManager.resources["metal"]["sent"], anArmyManager.resources["metal"]["received"] = Spring.GetTeamResources (anArmyManager.teamID, "metal")
       -- if debug then debugger("checkPersistentEvents 6. Checking Metal. teamID=" ..tostring(anArmyManager.teamID)..", currentLevel="..anArmyManager.resources["metal"]["currentLevel"]..", storage="..anArmyManager.resources["metal"]["storage"]..", pull="..anArmyManager.resources["metal"]["pull"]..", income="..anArmyManager.resources["metal"]["income"]..", expense="..anArmyManager.resources["metal"]["expense"]..", share="..anArmyManager.resources["metal"]["share"]..", sent="..anArmyManager.resources["metal"]["sent"]..", received="..anArmyManager.resources["metal"]["received"]) end
-      
       -- anArmyManager.resources["energy"]["currentLevel"], anArmyManager.resources["energy"]["storage"], anArmyManager.resources["energy"]["pull"], anArmyManager.resources["energy"]["income"], anArmyManager.resources["energy"]["expense"], anArmyManager.resources["energy"]["share"], anArmyManager.resources["energy"]["sent"], anArmyManager.resources["energy"]["received"] = Spring.GetTeamResources (anArmyManager.teamID, "metal")
       -- if debug then debugger("checkPersistentEvents 7. Checking Energy. teamID=" ..tostring(anArmyManager.teamID)..", currentLevel="..anArmyManager.resources["energy"]["currentLevel"]..", storage="..anArmyManager.resources["energy"]["storage"]..", pull="..anArmyManager.resources["energy"]["pull"]..", income="..anArmyManager.resources["energy"]["income"]..", expense="..anArmyManager.resources["energy"]["expense"]..", share="..anArmyManager.resources["energy"]["share"]..", sent="..anArmyManager.resources["energy"]["sent"]..", received="..anArmyManager.resources["energy"]["received"]) end
     end
   end
   if next(deadUnits) ~= nil then
-    for unitID, unit in pairs(deadUnits) do
+    for _, unit in pairs(deadUnits) do
       unit:setLost()
     end
   end
 end
 
 -- TODO: How to make this widget only be run if monitoring is enabled? MAYBE widget only brought in from other file? UnitDamaged(unitID, unitDefID, unitTeam, damage, paralyzer, weaponDefID, projectileID, attackerID, attackerDefID, attackerTeam)
-function widget:UnitDamaged(unitID, defID, teamID, damage, paralyzer, weaponDefID, projectileID, attackerUnitID, attackerDefID, attackerTeamID)
-  isEnabledDamagedWidget = true
-  if debug then debugger("widget:UnitDamaged 1. unitID=" ..tostring(unitID) .. ", defID=" ..tostring(defID) .. ", teamID=" .. tostring(teamID) .. ", damage=" .. tostring(damage) .. ", paralyzer=" .. tostring(paralyzer) .. ", weaponDefID=" .. tostring(weaponDefID) .. ", projectileID=" .. tostring(projectileID) .. ", attackerUnitID=" .. tostring(attackerUnitID) .. ", attackerDefID=" .. tostring(attackerDefID) .. ", attackerTeamID=" .. tostring(attackerTeamID) .. ", translatedHumanName=" .. tostring(UnitDefs[defID].translatedHumanName)) end
-  local army = teamsManager:getArmyManager(teamID)
-  if army and (army:hasTypeEventRules(defID, nil, "damaged") or army:hasTypeEventRules(defID, nil, "thresholdHP")) then
-    if debug then debugger("widget:UnitDamaged 2. Going to damaged-getHealth") end
-    army:getOrCreateUnit(unitID, defID):getHealth() -- automatically alerts for damaged and thresholdHP
-  end
-  -- if attackerUnitID and attackerDefID and attackerTeamID then -- Can't because always nil - widget:UnitDamaged
+-- function widget:UnitDamaged(unitID, defID, teamID, damage, paralyzer, weaponDefID, projectileID, attackerUnitID, attackerDefID, attackerTeamID)
+--   isEnabledDamagedWidget = true
+--   if debug then debugger("widget:UnitDamaged 1. unitID=" ..tostring(unitID) .. ", defID=" ..tostring(defID) .. ", teamID=" .. tostring(teamID) .. ", damage=" .. tostring(damage) .. ", paralyzer=" .. tostring(paralyzer) .. ", weaponDefID=" .. tostring(weaponDefID) .. ", projectileID=" .. tostring(projectileID) .. ", attackerUnitID=" .. tostring(attackerUnitID) .. ", attackerDefID=" .. tostring(attackerDefID) .. ", attackerTeamID=" .. tostring(attackerTeamID) .. ", translatedHumanName=" .. tostring(UnitDefs[defID].translatedHumanName)) end
+--   local army = teamsManager:getArmyManager(teamID)
+--   if army and (army:hasTypeEventRules(defID, nil, "damaged") or army:hasTypeEventRules(defID, nil, "thresholdHP")) then
+--     if debug then debugger("widget:UnitDamaged 2. Going to damaged-getHealth") end
+--     army:getOrCreateUnit(unitID, defID):getHealth() -- automatically alerts for damaged and thresholdHP
+--   end
+-- end
+
+-- Disregard unless this is fixed in BAR. Would go above.
+  -- if attackerUnitID and attackerDefID and attackerTeamID then -- Can't because BAR always nil for these in UnitDamaged
   --   army = teamsManager:getArmyManager(attackerTeamID)
   --   if army and army:hasTypeEventRules(defID, nil, "attacks") then
   --     local aUnit = army:getOrCreateUnit(unitID, defID)
@@ -2116,7 +2032,6 @@ function widget:UnitDamaged(unitID, defID, teamID, damage, paralyzer, weaponDefI
   --     end
   --   end
   -- end
-end
 
 -- doesn't run when spectating
 function widget:CommandsChanged() -- Called when the command descriptions changed, e.g. when selecting or deselecting a unit. Because widget:UnitIdle doesn't happen when the player removes the last unit in the factory queue
@@ -2163,13 +2078,13 @@ function widget:StockpileChanged(unitID, defID, teamID, weaponNum, oldCount, new
 end
 
 function widget:GameFrame(frame)
-  if warnFrame == 1 then -- with 30 UpdateInterval, run roughlys every half second
+  if warnFrame == 1 then -- with 30 updateInterval, run roughlys every half second
     checkPersistentEvents()
     if alertQueue:getSize() > 0 then
       teamsManager:alert()
     end
   end
-  warnFrame = (warnFrame + 1) % UpdateInterval
+  warnFrame = (warnFrame + 1) % updateInterval
 end
 
 function widget:PlayerChanged(playerID)
@@ -2194,3 +2109,7 @@ end
 function widget:Shutdown()
 	Spring.Echo(widgetName .. " widget disabled")
 end
+-- TODO: make separate lua files. VFS: https://springrts.com/wiki/Lua_VFS
+-- TODO: make so only widgets needed are imported
+-- When maxAlerts met using sharedAlerts, remove rule to keep new units being loaded, but don't worry about the existing units... until much later
+-- For spectator: could make sharedAlerts=all/team so can have shared team alerts...
