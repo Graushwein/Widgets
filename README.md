@@ -6,6 +6,8 @@
 * Feature requests welcome!
 * Streamer/caster wanting help getting the settings exactly the way you want? Shoot me a Discord message.
 
+**Tip**: F5 cycles the camera to previous ping locations.
+
 Just use the premade events and rules like this:
 * ``myCommanderRules = {thresholdHP = {reAlertSec=60, mark="Commander In Danger", alertSound="sounds/commands/cmd-selfd.wav", threshMinPerc=.5, priority=0}}``
 * ``allyFactoryT2Rules = {finished = {maxAlerts=1, mark="T2 Ally Factory", alertDelay=30, messageTo="allies", messageTxt="T2 Con Please!", sharedAlerts=true}}``
