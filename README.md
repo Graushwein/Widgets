@@ -2,7 +2,7 @@
 * Playing and wanting it to ping where an enemy commander was briefly revealed, or even a reminder (x seconds later) to rebuild a destroyed mex? No problem.
 * Casting a match and want an alert when any commander's HP is under x%, an anti/nuke launcher is made and finishes the missile, or even when a commander and other units you designate are loaded into a transport... That's easy! :) (There's separate spectator settings so you can set them without worry about changing things when it is time to play.) 
 * Don't want to be spammed by alerts? Well you're in luck, because you can set how often all alerts happen (individually / globally) and only keep the important ones for later, prioritized how you like.
-* Questions or want help making an alert? Just put it in the BAR Discord Easy Alerts thread and I'll be happy to help.
+* Questions or want help making an alert? Just put it in the [BAR Discord Easy Alerts thread](https://discord.com/channels/549281623154229250/1394202573828919376/1394202573828919376) and I'll be happy to help.
 * Feature requests welcome!
 * Streamer/caster wanting help getting the settings exactly the way you want? Shoot me a Discord message.
 
