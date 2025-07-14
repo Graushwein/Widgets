@@ -8,7 +8,7 @@
 
 Just use the premade events and rules like this:
 * ``myCommanderRules = {thresholdHP = {reAlertSec=60, mark="Commander In Danger", alertSound="sounds/commands/cmd-selfd.wav", threshMinPerc=.5, priority=0}}``
-* ``allyFactoryT2Rules = {finished = {maxAlerts=1, mark="T2 Ally Factory", alertDelay=30, messageTo="allies", messageTxt="T2 Con Please!"}}``
+* ``allyFactoryT2Rules = {finished = {maxAlerts=1, mark="T2 Ally Factory", alertDelay=30, messageTo="allies", messageTxt="T2 Con Please!", sharedAlerts=true}}``
 
 ### IMPORTANT: If you are thinking of skipping the rest of this document, take a moment to read this section and the "Event Rules" section. It's short and worth the 30 seconds. 
 * By default, all alerts apply to each individual unit separately! sharedAlerts is your friend.
