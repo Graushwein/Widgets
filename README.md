@@ -18,7 +18,9 @@ Just use the premade events and rules like this:
 * To quickly test your settings, start a game with an AI and play normally. When you want to add/change an alert, pause the game, update and save "Easy_Alerts.lua", press F11, toggle off/on to restart Easy_Alerts, and continue playing. If you make a mistake with a rule, which must be formatted "{event = {rules}}", it will alert you at the top of the game.
 * (Most of this is probably obvious to most people, but I find it is always nice to have documentation to reference.)
   
-Installation: Drop "Easy_Alerts.lua" into BAR's "widgets" folder. (...\Beyond-All-Reason\data\LuaUI\Widgets)
+Installation: 
+* [Download Easy Alerts](https://github.com/Graushwein/Widgets/archive/refs/tags/1.0.zip)
+* Drop "Easy_Alerts.lua" into BAR's "widgets" folder. (...\Beyond-All-Reason\data\LuaUI\Widgets)
 * Customizing Alerts: Open the file, customize your rules using the istructions below, save the file.
 
 ### The Unit Alert Structure: -- {unitType = {event1 = {rules1}, {event2 = {rules2}}}
