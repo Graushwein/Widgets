@@ -2312,14 +2312,12 @@ function widget:Shutdown()
     -- debugger("String: " .. tableToString(my_table)) -- works
   end
   Spring.Echo(widgetName .. " widget disabled")
-  widgetHandler:RemoveWidget()
+  -- widgetHandler:RemoveWidget()
 end
 
 function widget:GameOver()
   Spring.Echo("GameOver: "..widgetName)
-	widget:Shutdown()
 end
-widget:Initialize()
 -- TODO: make separate lua files. VFS: https://springrts.com/wiki/Lua_VFS
 -- TODO: make so only widgets needed are imported
 -- When maxAlerts met using sharedAlerts, remove rule to keep new units being loaded, but don't worry about the existing units... until much later
