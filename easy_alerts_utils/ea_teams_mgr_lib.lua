@@ -1,5 +1,5 @@
 -- Library files should not have GetInfo(), causes crash by caller lua
-VFS.Include("LuaUI/Widgets/easy_alerts_utils/ea_general_lib.lua")
+VFS.Include("LuaUI/easy_alerts_utils/ea_general_lib.lua")
 
 myTeamID = Spring.GetMyTeamID()
 myPlayerID = Spring.GetMyPlayerID()

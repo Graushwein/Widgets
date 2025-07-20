@@ -10,7 +10,7 @@ function widget:GetInfo()
 		enabled = true,
 	}
 end
-VFS.Include("LuaUI/Widgets/easy_alerts_utils/ea_teams_mgr_lib.lua")
+VFS.Include("LuaUI/easy_alerts_utils/ea_teams_mgr_lib.lua")
 -- ################################################# Config variables starts here #################################################
 local soundVolume = 1.0 -- Set the volume between 0.0 and 1.0. NOT USED
 

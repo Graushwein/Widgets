@@ -10,7 +10,7 @@ function widget:GetInfo()
 		enabled = false,
 	}
 end
-VFS.Include("LuaUI/Widgets/easy_alerts_utils/ea_teams_mgr_lib.lua")
+VFS.Include("LuaUI/easy_alerts_utils/ea_teams_mgr_lib.lua")
 
 
 
