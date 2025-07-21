@@ -19,8 +19,9 @@ Just use the premade events and rules like this:
 * (Most of this is probably obvious to most people, but I find it is always nice to have documentation to reference.)
   
 Installation: 
-* [Download Easy Alerts](https://github.com/Graushwein/Widgets/archive/refs/tags/1.0.zip)
-* Drop "Easy_Alerts.lua" into BAR's "widgets" folder. (...\Beyond-All-Reason\data\LuaUI\Widgets)
+* [Download Easy Alerts](https://github.com/Graushwein/Widgets/archive/refs/tags/1.0.zip) and unzip
+* In the "...\Beyond-All-Reason\data\LuaUI" folder, make a folder called "easy_alerts_utils", and place the "_lib.lua" files in it
+* Drop "Easy_Alerts_Debug.lua" into BAR's "widgets" folder. (...\Beyond-All-Reason\data\LuaUI\Widgets)
 * Customizing Alerts: Open the file, customize your rules using the istructions below, save the file.
 
 ### The Unit Alert Structure: -- {unitType = {event1 = {rules1}, {event2 = {rules2}}}}

@@ -1,3 +1,4 @@
+---@diagnostic disable: duplicate-set-field
 local widgetName = "Easy_Alerts"
 function widget:GetInfo()
 	return {
@@ -100,18 +101,18 @@ local tmsMgr
 -- ################################################# Idle Alerts start here #################################################
 function widget:UnitIdle(unitID, defID, teamID)
   TeamsManager.funcCounts.numIdle = TeamsManager.funcCounts.numIdle + 1
-  if debug then debugger("widget:UnitIdle 1. unitID=" .. tostring(unitID)..", defID=" .. tostring(defID)..", defIDType=" .. type(defID) .. ", teamID=" .. tostring(teamID) .. ", translatedHumanName=" .. tostring(UnitDefs[defID].translatedHumanName)) end
+  if debug then Debugger("widget:UnitIdle 1. unitID=" .. tostring(unitID)..", defID=" .. tostring(defID)..", defIDType=" .. type(defID) .. ", teamID=" .. tostring(teamID) .. ", translatedHumanName=" .. tostring(UnitDefs[defID].translatedHumanName)) end
   local anArmy = TeamsManager:getArmyManager(teamID)
   if anArmy and anArmy:hasTypeEventRules(defID) then
-    if debug then debugger("widget:UnitIdle 2. Going to getOrCreateUnit, then setIdle") end
+    if debug then Debugger("widget:UnitIdle 2. Going to getOrCreateUnit, then setIdle") end
     anArmy:getOrCreateUnit(unitID, defID):setIdle() -- automatically alerts when not idle
   end
 end
 
 function widget:UnitDestroyed(unitID, defID, teamID, attackerID, attackerDefID, attackerTeam)	-- Triggered when unit dies or construction canceled/destroyed while being built
   TeamsManager.funcCounts.numDestroyed = TeamsManager.funcCounts.numDestroyed + 1
-  if debug then debugger("widget:UnitDestroyed 1. Unit taken. unitID=" .. tostring(unitID) .. ", unitDefID=" ..tostring(defID) .. ", attackerID=" ..tostring(attackerID) .. ", attackerDefID=" ..tostring(attackerDefID) .. ", attackerTeam=" ..tostring(attackerTeam) .. ", translatedHumanName=" .. tostring(UnitDefs[defID].translatedHumanName)) end
-  if debug then debugger("UnitDestroyed 2 unitID=" ..tostring(unitID) .. ", translatedHumanName=" .. tostring(UnitDefs[defID].translatedHumanName)) end
+  if debug then Debugger("widget:UnitDestroyed 1. Unit taken. unitID=" .. tostring(unitID) .. ", unitDefID=" ..tostring(defID) .. ", attackerID=" ..tostring(attackerID) .. ", attackerDefID=" ..tostring(attackerDefID) .. ", attackerTeam=" ..tostring(attackerTeam) .. ", translatedHumanName=" .. tostring(UnitDefs[defID].translatedHumanName)) end
+  if debug then Debugger("UnitDestroyed 2 unitID=" ..tostring(unitID) .. ", translatedHumanName=" .. tostring(UnitDefs[defID].translatedHumanName)) end
   local army = TeamsManager:getArmyManager(teamID)
   if army then
     local aUnit = army:getUnit(unitID)
@@ -125,8 +126,8 @@ end
 
 function widget:UnitTaken(unitID, defID, oldTeamID, newTeamID) -- Taken or given
   TeamsManager.funcCounts.numTaken = TeamsManager.funcCounts.numTaken + 1
-  -- if not TeamsManager:validIDs(true, unitID, true, defID, true, oldTeamID, true, newTeamID, nil, nil) then debugger("UnitTaken 0. INVALID input. Returning nil. unitID=" .. tostring(unitID)..", defID=" .. tostring(defID) .. ", oldTeamID=" .. tostring(oldTeamID) .. ", newTeamID=" .. tostring(newTeamID) .. ", translatedHumanName=" .. tostring(UnitDefs[defID].translatedHumanName)) return nil end
-  if debug then debugger("widget:UnitTaken 1. Unit taken. unitID=" .. tostring(unitID) .. ", unitDefID=" ..tostring(defID)  .. ", oldTeamID=" ..tostring(oldTeamID) .. ", newTeamID=" ..tostring(newTeamID)) end
+  -- if not TeamsManager:validIDs(true, unitID, true, defID, true, oldTeamID, true, newTeamID, nil, nil) then Debugger("UnitTaken 0. INVALID input. Returning nil. unitID=" .. tostring(unitID)..", defID=" .. tostring(defID) .. ", oldTeamID=" .. tostring(oldTeamID) .. ", newTeamID=" .. tostring(newTeamID) .. ", translatedHumanName=" .. tostring(UnitDefs[defID].translatedHumanName)) return nil end
+  if debug then Debugger("widget:UnitTaken 1. Unit taken. unitID=" .. tostring(unitID) .. ", unitDefID=" ..tostring(defID)  .. ", oldTeamID=" ..tostring(oldTeamID) .. ", newTeamID=" ..tostring(newTeamID)) end
   if not IsSpectator and (TeamsManager:getArmyManager(oldTeamID):hasTypeEventRules(defID) or TeamsManager:getArmyManager(newTeamID):hasTypeEventRules(defID)) then
     local oldArmy = TeamsManager:getArmyManager(oldTeamID)
     if oldArmy then
@@ -141,7 +142,7 @@ end
 
 function widget:UnitCreated(unitID, defID, teamID, builderID) -- Starts being built
   TeamsManager.funcCounts.numCreated = TeamsManager.funcCounts.numCreated + 1
-  if debug then debugger("widget:UnitCreated 1. Unit construction started. unitID=" .. tostring(unitID) .. ", unitDefID=" ..tostring(defID) .. ", teamID=" ..tostring(teamID) .. ", builderID=" ..tostring(builderID) .. ", translatedHumanName=" .. tostring(UnitDefs[defID].translatedHumanName)) end
+  if debug then Debugger("widget:UnitCreated 1. Unit construction started. unitID=" .. tostring(unitID) .. ", unitDefID=" ..tostring(defID) .. ", teamID=" ..tostring(teamID) .. ", builderID=" ..tostring(builderID) .. ", translatedHumanName=" .. tostring(UnitDefs[defID].translatedHumanName)) end
   local army = TeamsManager:getArmyManager(teamID)
   if army and army:hasTypeEventRules(defID) then
     army:getOrCreateUnit(unitID, defID) -- automatically alerts
@@ -150,11 +151,11 @@ end
 
 function widget:UnitFinished(unitID, defID, teamID, builderID) -- Finished being built
   TeamsManager.funcCounts.numFinished = TeamsManager.funcCounts.numFinished + 1
-  if debug then debugger("widget:UnitFinished 1 is now completed and ready. unitID=" .. tostring(unitID) .. ", unitDefID=" ..tostring(defID) .. ", teamID=" ..tostring(teamID) .. ", builderID=" ..tostring(builderID) .. ", translatedHumanName=" .. tostring(UnitDefs[defID].translatedHumanName)) end
+  if debug then Debugger("widget:UnitFinished 1 is now completed and ready. unitID=" .. tostring(unitID) .. ", unitDefID=" ..tostring(defID) .. ", teamID=" ..tostring(teamID) .. ", builderID=" ..tostring(builderID) .. ", translatedHumanName=" .. tostring(UnitDefs[defID].translatedHumanName)) end
   local army = TeamsManager:getArmyManager(teamID)
   if army and army:hasTypeEventRules(defID) then
     local aUnit = army:getOrCreateUnit(unitID, defID)
-    if debug then debugger("widget:UnitFinished 2. Sending alert. unitID=" .. tostring(unitID) .. ", unitDefID=" ..tostring(defID) .. ", teamID=" ..tostring(teamID) .. ", builderID=" ..tostring(builderID)) end
+    if debug then Debugger("widget:UnitFinished 2. Sending alert. unitID=" .. tostring(unitID) .. ", unitDefID=" ..tostring(defID) .. ", teamID=" ..tostring(teamID) .. ", builderID=" ..tostring(builderID)) end
     local finishedEvent = aUnit:getTypesRulesForEvent("finished", true, true)
     if finishedEvent then
       TeamsManager:addUnitToAlertQueue(aUnit, finishedEvent)
@@ -171,12 +172,12 @@ function widget:UnitEnteredLos(unitID, teamID, allyTeam, defID) -- Called when a
   if defID == nil then
     defID = Spring.GetUnitDefID(unitID)
     if defID == nil then
-      debugger("widget:UnitEnteredLos 0. Cannot get defID for unit?")
+      Debugger("widget:UnitEnteredLos 0. Cannot get defID for unit?")
       return nil
     end
   end
-  -- if not TeamsManager:validIDs(true, unitID, nil, nil, true, teamID, nil, nil, nil, nil) then debugger("UnitEnteredLos 0. INVALID input. Returning nil unitID=" .. tostring(unitID)..", defID=" .. tostring(defID) .. ", teamID=" .. tostring(teamID) .. ", allyTeam=" .. tostring(allyTeam) .. ", translatedHumanName=" .. tostring(UnitDefs[defID].translatedHumanName)) return nil end
-  if debug then debugger("widget:UnitEnteredLos 1. unitID=" .. tostring(unitID)..", defID=" .. tostring(defID) .. ", teamID=" .. tostring(teamID) .. ", allyTeam=" .. tostring(allyTeam) .. ", translatedHumanName=" .. tostring(UnitDefs[defID].translatedHumanName)) end -- 
+  -- if not TeamsManager:validIDs(true, unitID, nil, nil, true, teamID, nil, nil, nil, nil) then Debugger("UnitEnteredLos 0. INVALID input. Returning nil unitID=" .. tostring(unitID)..", defID=" .. tostring(defID) .. ", teamID=" .. tostring(teamID) .. ", allyTeam=" .. tostring(allyTeam) .. ", translatedHumanName=" .. tostring(UnitDefs[defID].translatedHumanName)) return nil end
+  if debug then Debugger("widget:UnitEnteredLos 1. unitID=" .. tostring(unitID)..", defID=" .. tostring(defID) .. ", teamID=" .. tostring(teamID) .. ", allyTeam=" .. tostring(allyTeam) .. ", translatedHumanName=" .. tostring(UnitDefs[defID].translatedHumanName)) end -- 
   local anArmy = TeamsManager:getArmyManager(teamID)
   if anArmy and anArmy:hasTypeEventRules(defID) then
     local aUnit = anArmy:getOrCreateUnit(unitID, defID)
@@ -191,13 +192,13 @@ end
 
 local function checkPersistentEvents() -- Checks all of the events that BAR widgets don't cover
   TeamsManager.funcCounts.numCkPrst = TeamsManager.funcCounts.numCkPrst + 1
-  if debug then debugger("checkPersistentEvents 1.") end
+  if debug then Debugger("checkPersistentEvents 1.") end
   local armiesToCheck
   if IsSpectator then
-    if debug then debugger("checkPersistentEvents 2. IsSpectator, using all armies.") end
+    if debug then Debugger("checkPersistentEvents 2. IsSpectator, using all armies.") end
     armiesToCheck = TeamsManager.armies
   else
-    if debug then debugger("checkPersistentEvents 2. Is Player, using myArmyManager.") end
+    if debug then Debugger("checkPersistentEvents 2. Is Player, using myArmyManager.") end
     armiesToCheck = {MyTeamID = TeamsManager.myArmyManager}
   end
   local deadUnits = {} -- ensure dead units get removed from persistently checked tables
@@ -206,13 +207,13 @@ local function checkPersistentEvents() -- Checks all of the events that BAR widg
       if type(anArmyManager["idle"]) == "table" then
         for unitID, unit in pairs(anArmyManager["idle"]) do
           if Spring.GetUnitIsDead(unitID) then
-            if debug then debugger("checkPersistentEvents 3. Dead Unit found.") end
+            if debug then Debugger("checkPersistentEvents 3. Dead Unit found.") end
             deadUnits[unitID] = unit
           elseif not TeamsManager:getQueuedEvents(unit,nil,nil,"idle") and unit:getIdle() == true then
-            if debug then debugger("checkPersistentEvents 4. Builder idle. unitID=" ..tostring(unitID) .. ", defID=" ..tostring(unit.defID) .. ", teamID=" .. tostring(unit.parent.teamID)) end
+            if debug then Debugger("checkPersistentEvents 4. Builder idle. unitID=" ..tostring(unitID) .. ", defID=" ..tostring(unit.defID) .. ", teamID=" .. tostring(unit.parent.teamID)) end
             local typeRules = unit:getTypesRulesForEvent("idle", true, true)
             if typeRules then
-              if debug then debugger("checkPersistentEvents 5. CanAlertNow for idle. Going to addUnitToAlertQueue.") end
+              if debug then Debugger("checkPersistentEvents 5. CanAlertNow for idle. Going to addUnitToAlertQueue.") end
               TeamsManager:addUnitToAlertQueue(unit, typeRules)
             end
           end
@@ -221,10 +222,10 @@ local function checkPersistentEvents() -- Checks all of the events that BAR widg
       if type(anArmyManager["thresholdHP"]) == "table" then
         for unitID, unit in pairs(anArmyManager["thresholdHP"]) do
           if Spring.GetUnitIsDead(unitID) then
-            if debug then debugger("checkPersistentEvents 5. Removing Dead Unit.") end
+            if debug then Debugger("checkPersistentEvents 5. Removing Dead Unit.") end
             deadUnits[unitID] = unit
           else
-            if debug then debugger("checkPersistentEvents 5. Checking thresholdHP. unitID=" ..tostring(unitID) .. ", defID=" ..tostring(unit.defID) .. ", teamID=" .. tostring(unit.parent.teamID) .. ", translatedHumanName=" .. tostring(UnitDefs[unit.defID].translatedHumanName)) end
+            if debug then Debugger("checkPersistentEvents 5. Checking thresholdHP. unitID=" ..tostring(unitID) .. ", defID=" ..tostring(unit.defID) .. ", teamID=" .. tostring(unit.parent.teamID) .. ", translatedHumanName=" .. tostring(UnitDefs[unit.defID].translatedHumanName)) end
             if not TeamsManager:getQueuedEvents(unit,nil,nil,"thresholdHP") then
               unit:getHealth() -- automatically alerts
             end
@@ -233,9 +234,9 @@ local function checkPersistentEvents() -- Checks all of the events that BAR widg
       end
       -- Next phase - non-unit events
       -- anArmyManager.resources["metal"]["currentLevel"], anArmyManager.resources["metal"]["storage"], anArmyManager.resources["metal"]["pull"], anArmyManager.resources["metal"]["income"], anArmyManager.resources["metal"]["expense"], anArmyManager.resources["metal"]["share"], anArmyManager.resources["metal"]["sent"], anArmyManager.resources["metal"]["received"] = Spring.GetTeamResources (anArmyManager.teamID, "metal")
-      -- if debug then debugger("checkPersistentEvents 6. Checking Metal. teamID=" ..tostring(anArmyManager.teamID)..", currentLevel="..anArmyManager.resources["metal"]["currentLevel"]..", storage="..anArmyManager.resources["metal"]["storage"]..", pull="..anArmyManager.resources["metal"]["pull"]..", income="..anArmyManager.resources["metal"]["income"]..", expense="..anArmyManager.resources["metal"]["expense"]..", share="..anArmyManager.resources["metal"]["share"]..", sent="..anArmyManager.resources["metal"]["sent"]..", received="..anArmyManager.resources["metal"]["received"]) end
+      -- if debug then Debugger("checkPersistentEvents 6. Checking Metal. teamID=" ..tostring(anArmyManager.teamID)..", currentLevel="..anArmyManager.resources["metal"]["currentLevel"]..", storage="..anArmyManager.resources["metal"]["storage"]..", pull="..anArmyManager.resources["metal"]["pull"]..", income="..anArmyManager.resources["metal"]["income"]..", expense="..anArmyManager.resources["metal"]["expense"]..", share="..anArmyManager.resources["metal"]["share"]..", sent="..anArmyManager.resources["metal"]["sent"]..", received="..anArmyManager.resources["metal"]["received"]) end
       -- anArmyManager.resources["energy"]["currentLevel"], anArmyManager.resources["energy"]["storage"], anArmyManager.resources["energy"]["pull"], anArmyManager.resources["energy"]["income"], anArmyManager.resources["energy"]["expense"], anArmyManager.resources["energy"]["share"], anArmyManager.resources["energy"]["sent"], anArmyManager.resources["energy"]["received"] = Spring.GetTeamResources (anArmyManager.teamID, "metal")
-      -- if debug then debugger("checkPersistentEvents 7. Checking Energy. teamID=" ..tostring(anArmyManager.teamID)..", currentLevel="..anArmyManager.resources["energy"]["currentLevel"]..", storage="..anArmyManager.resources["energy"]["storage"]..", pull="..anArmyManager.resources["energy"]["pull"]..", income="..anArmyManager.resources["energy"]["income"]..", expense="..anArmyManager.resources["energy"]["expense"]..", share="..anArmyManager.resources["energy"]["share"]..", sent="..anArmyManager.resources["energy"]["sent"]..", received="..anArmyManager.resources["energy"]["received"]) end
+      -- if debug then Debugger("checkPersistentEvents 7. Checking Energy. teamID=" ..tostring(anArmyManager.teamID)..", currentLevel="..anArmyManager.resources["energy"]["currentLevel"]..", storage="..anArmyManager.resources["energy"]["storage"]..", pull="..anArmyManager.resources["energy"]["pull"]..", income="..anArmyManager.resources["energy"]["income"]..", expense="..anArmyManager.resources["energy"]["expense"]..", share="..anArmyManager.resources["energy"]["share"]..", sent="..anArmyManager.resources["energy"]["sent"]..", received="..anArmyManager.resources["energy"]["received"]) end
     end
   end
   if next(deadUnits) ~= nil then
@@ -249,10 +250,10 @@ end
 -- function widget:UnitDamaged(unitID, defID, teamID, damage, paralyzer, weaponDefID, projectileID, attackerUnitID, attackerDefID, attackerTeamID)
 --   funcCounts.numDamaged = funcCounts.numDamaged + 1
 --   TeamsManager.isEnabledDamagedWidget = true
---   if debug then debugger("widget:UnitDamaged 1. unitID=" ..tostring(unitID) .. ", defID=" ..tostring(defID) .. ", teamID=" .. tostring(teamID) .. ", damage=" .. tostring(damage) .. ", paralyzer=" .. tostring(paralyzer) .. ", weaponDefID=" .. tostring(weaponDefID) .. ", projectileID=" .. tostring(projectileID) .. ", attackerUnitID=" .. tostring(attackerUnitID) .. ", attackerDefID=" .. tostring(attackerDefID) .. ", attackerTeamID=" .. tostring(attackerTeamID) .. ", translatedHumanName=" .. tostring(UnitDefs[defID].translatedHumanName)) end
+--   if debug then Debugger("widget:UnitDamaged 1. unitID=" ..tostring(unitID) .. ", defID=" ..tostring(defID) .. ", teamID=" .. tostring(teamID) .. ", damage=" .. tostring(damage) .. ", paralyzer=" .. tostring(paralyzer) .. ", weaponDefID=" .. tostring(weaponDefID) .. ", projectileID=" .. tostring(projectileID) .. ", attackerUnitID=" .. tostring(attackerUnitID) .. ", attackerDefID=" .. tostring(attackerDefID) .. ", attackerTeamID=" .. tostring(attackerTeamID) .. ", translatedHumanName=" .. tostring(UnitDefs[defID].translatedHumanName)) end
 --   local army = TeamsManager:getArmyManager(teamID)
 --   if army and (army:hasTypeEventRules(defID, nil, "damaged") or army:hasTypeEventRules(defID, nil, "thresholdHP")) then
---     if debug then debugger("widget:UnitDamaged 2. Going to damaged-getHealth") end
+--     if debug then Debugger("widget:UnitDamaged 2. Going to damaged-getHealth") end
 --     army:getOrCreateUnit(unitID, defID):getHealth() -- automatically alerts for damaged and thresholdHP
 --   end
 -- end
@@ -263,10 +264,10 @@ end
   --   if army and army:hasTypeEventRules(defID, nil, "attacks") then
   --     local aUnit = army:getOrCreateUnit(unitID, defID)
   --     if aUnit then
-  --       if true then debugger("widget:UnitDamaged 3. Attacker found. Going to getTypesRulesForEvent") end
+  --       if true then Debugger("widget:UnitDamaged 3. Attacker found. Going to getTypesRulesForEvent") end
   --       local attacksEvent = aUnit:getTypesRulesForEvent("attacks", true, true)
   --       if attacksEvent then
-  --         if true then debugger("widget:UnitDamaged 4. Has attacksEvent. Going to addUnitToAlertQueue") end
+  --         if true then Debugger("widget:UnitDamaged 4. Has attacksEvent. Going to addUnitToAlertQueue") end
   --         TeamsManager:addUnitToAlertQueue(aUnit, attacksEvent)
   --       end
   --     end
@@ -277,22 +278,22 @@ end
 function widget:CommandsChanged() -- Called when the command descriptions changed, e.g. when selecting or deselecting a unit. Because widget:UnitIdle doesn't happen when the player removes the last unit in the factory queue
   TeamsManager.funcCounts.numCommands = TeamsManager.funcCounts.numCommands + 1
   if IsSpectator then return
-  elseif debug then debugger("widget:CommandsChanged 1. Called when the command descriptions changed, e.g. when selecting or deselecting a unit.") end
+  elseif debug then Debugger("widget:CommandsChanged 1. Called when the command descriptions changed, e.g. when selecting or deselecting a unit.") end
 	if type(TeamsManager.myArmyManager.factories) == "table" then
     for unitID, unit in pairs(TeamsManager.myArmyManager.factories) do
-      if debug then debugger("CommandsChanged 2. unitID=" ..tostring(unitID) .. ", defID=" ..tostring(unit.defID) .. ", isFactory=" .. tostring(unit.isFactory) .. ", translatedHumanName=" .. tostring(UnitDefs[unit.defID].translatedHumanName)) end
+      if debug then Debugger("CommandsChanged 2. unitID=" ..tostring(unitID) .. ", defID=" ..tostring(unit.defID) .. ", isFactory=" .. tostring(unit.isFactory) .. ", translatedHumanName=" .. tostring(UnitDefs[unit.defID].translatedHumanName)) end
       if unit:getIdle() == true then -- automatically adds unit to idle alert queue if it applies
-        if debug then debugger("widget:CommandsChanged 3. Factory added to parent[idle] table. unitID=" ..tostring(unitID) .. ", defID=" ..tostring(unit.defID)) end
+        if debug then Debugger("widget:CommandsChanged 3. Factory added to parent[idle] table. unitID=" ..tostring(unitID) .. ", defID=" ..tostring(unit.defID)) end
       end
     end
   end
-  alertMessage("Easy Alerts is fully running :( ", "me")
+  AlertMessage("Easy Alerts is fully running :( ", "me")
 end
 
 function widget:UnitLoaded(unitID, defID, teamID, transportID, transportTeamID) -- Called when a unit is loaded by a transport.
   TeamsManager.funcCounts.numLoaded = TeamsManager.funcCounts.numLoaded + 1
-  -- if not tmsMgr:validIDs(true, unitID, true, defID, true, teamID, nil, nil, nil, nil) then debugger("UnitLoaded 0. INVALID input. Returning nil unitID=" .. tostring(unitID)..", defID=" .. tostring(defID) .. ", teamID=" .. tostring(teamID) .. ", transportID=" .. tostring(transportID) .. ", transportTeamID=" .. tostring(transportTeamID) .. ", translatedHumanName=" .. tostring(UnitDefs[defID].translatedHumanName)) return nil end
-  if debug then debugger("widget:UnitLoaded 1. unitID=" .. tostring(unitID)..", defID=" .. tostring(defID) .. ", teamID=" .. tostring(teamID) .. ", transportID=" .. tostring(transportID) .. ", transportTeamID=" .. tostring(transportTeamID) .. ", translatedHumanName=" .. tostring(UnitDefs[defID].translatedHumanName)) end
+  -- if not tmsMgr:validIDs(true, unitID, true, defID, true, teamID, nil, nil, nil, nil) then Debugger("UnitLoaded 0. INVALID input. Returning nil unitID=" .. tostring(unitID)..", defID=" .. tostring(defID) .. ", teamID=" .. tostring(teamID) .. ", transportID=" .. tostring(transportID) .. ", transportTeamID=" .. tostring(transportTeamID) .. ", translatedHumanName=" .. tostring(UnitDefs[defID].translatedHumanName)) return nil end
+  if debug then Debugger("widget:UnitLoaded 1. unitID=" .. tostring(unitID)..", defID=" .. tostring(defID) .. ", teamID=" .. tostring(teamID) .. ", transportID=" .. tostring(transportID) .. ", transportTeamID=" .. tostring(transportTeamID) .. ", translatedHumanName=" .. tostring(UnitDefs[defID].translatedHumanName)) end
   local anArmy = tmsMgr:getArmyManager(teamID)
   if anArmy and anArmy:hasTypeEventRules(defID) then
     local aUnit = anArmy:getOrCreateUnit(unitID, defID)
@@ -307,8 +308,8 @@ end
 
 function widget:StockpileChanged(unitID, defID, teamID, weaponNum, oldCount, newCount) -- Called when a units stockpile of weapons increases or decreases. See stockpile.
   TeamsManager.funcCounts.numStockpile = TeamsManager.funcCounts.numStockpile + 1
-  -- if not tmsMgr:validIDs(true, unitID, true, defID, true, teamID, nil, nil, nil, nil) then debugger("StockpileChanged 0. INVALID input. Returning nil unitID=" .. tostring(unitID)..", defID=" .. tostring(defID) .. ", teamID=" .. tostring(teamID) .. ", transportID=" .. tostring(transportID) .. ", transportTeamID=" .. tostring(transportTeamID) .. ", translatedHumanName=" .. tostring(UnitDefs[defID].translatedHumanName)) return nil end
-  if debug then debugger("widget:StockpileChanged 1. unitID=" .. tostring(unitID)..", defID=" .. tostring(defID) .. ", teamID=" .. tostring(teamID) .. ", translatedHumanName=" .. tostring(UnitDefs[defID].translatedHumanName)) end
+  -- if not tmsMgr:validIDs(true, unitID, true, defID, true, teamID, nil, nil, nil, nil) then Debugger("StockpileChanged 0. INVALID input. Returning nil unitID=" .. tostring(unitID)..", defID=" .. tostring(defID) .. ", teamID=" .. tostring(teamID) .. ", transportID=" .. tostring(transportID) .. ", transportTeamID=" .. tostring(transportTeamID) .. ", translatedHumanName=" .. tostring(UnitDefs[defID].translatedHumanName)) return nil end
+  if debug then Debugger("widget:StockpileChanged 1. unitID=" .. tostring(unitID)..", defID=" .. tostring(defID) .. ", teamID=" .. tostring(teamID) .. ", translatedHumanName=" .. tostring(UnitDefs[defID].translatedHumanName)) end
   local anArmy = tmsMgr:getArmyManager(teamID)
   if anArmy and anArmy:hasTypeEventRules(defID) then
     local aUnit = anArmy:getOrCreateUnit(unitID, defID)
@@ -324,7 +325,7 @@ end
 function widget:GameFrame(frame)
   if warnFrame == 1 then -- with 30 UpdateInterval, run roughlys every half second
     checkPersistentEvents()
-    if alertQueue:getSize() > 0 then
+    if AlertQueue:getSize() > 0 then
       tmsMgr:alert()
     end
   end
@@ -340,13 +341,13 @@ function widget:Initialize()
   widget:PlayerChanged()
   tmsMgr = TeamsManager:Initialize(trackMyTypesRules, trackAllyTypesRules, trackEnemyTypesRules, trackSpectatorTypesRules, myCustomGroups,allyCustomGroups,enemyCustomGroups,spectatorCustomGroups)
 	if not tmsMgr then
-    debugger("makeRelTeamDefsRules() or loadCustomGroups() returned FALSE. Fix trackMyTypesRules, trackAllyTypesRules, trackEnemyTypesRules, or custom group tables tables.")
+    Debugger("makeRelTeamDefsRules() or loadCustomGroups() returned FALSE. Fix trackMyTypesRules, trackAllyTypesRules, trackEnemyTypesRules, or custom group tables tables.")
     
   end
 	Spring.Echo("Starting " .. widgetName)
 
   local gameID = Game.gameID and Game.gameID or Spring.GetGameRulesParam("GameID")
-	if true then debugger("widget:Initialize 1. gameID="..tostring(gameID)..", IsSpectator="..tostring(IsSpectator)) end --  .. ", translatedHumanName=" .. tostring(UnitDefs[defID].translatedHumanName)
+	if true then Debugger("widget:Initialize 1. gameID="..tostring(gameID)..", IsSpectator="..tostring(IsSpectator)) end --  .. ", translatedHumanName=" .. tostring(UnitDefs[defID].translatedHumanName)
   -- doTesting()
   -- debug = true
   return
@@ -354,10 +355,10 @@ function widget:Initialize()
 end
 
 function widget:Shutdown()
-	if TeamsManager.config.FunctionRunCounts then debugger("FunctionRunCounts:\n numArmies="..tostring(TeamsManager.funcCounts.numArmies).."\n numCreateUnit="..tostring(TeamsManager.funcCounts.numCreateUnit)..", numStockpile="..tostring(TeamsManager.funcCounts.numStockpile).."\n numLoaded="..tostring(TeamsManager.funcCounts.numLoaded).."\n numCommands="..tostring(TeamsManager.funcCounts.numCommands).."\n numCkPrst="..tostring(TeamsManager.funcCounts.numCkPrst).."\n numLOS="..tostring(TeamsManager.funcCounts.numLOS).."\n numFinished="..tostring(TeamsManager.funcCounts.numFinished).."\n numCreated="..tostring(TeamsManager.funcCounts.numCreated).."\n numTaken="..tostring(TeamsManager.funcCounts.numTaken).."\n numIdle="..tostring(TeamsManager.funcCounts.numIdle).."\n numDestroyed="..tostring(TeamsManager.funcCounts.numDestroyed).."\n numGetHealth="..tostring(TeamsManager.funcCounts.numGetHealth).."\n numGetCoords="..tostring(TeamsManager.funcCounts.numGetCoords).."\n numHasRules="..tostring(TeamsManager.funcCounts.numHasRules).."\n numSetTypes="..tostring(TeamsManager.funcCounts.numSetTypes).."\n numDamaged="..tostring(TeamsManager.funcCounts.numDamaged).."\n numSetLost="..tostring(TeamsManager.funcCounts.numSetLost).."\n numGetIdle="..tostring(TeamsManager.funcCounts.numGetIdle).."\n numSetNotIdle="..tostring(TeamsManager.funcCounts.numSetNotIdle).."\n numSetIdle="..tostring(TeamsManager.funcCounts.numSetIdle).."\n numHasEventRules="..tostring(TeamsManager.funcCounts.numHasEventRules).."\n numCanAlert="..tostring(TeamsManager.funcCounts.numCanAlert).."\n numGetRulesForEvent="..tostring(TeamsManager.funcCounts.numGetRulesForEvent).."\n numGetOrCreate="..tostring(TeamsManager.funcCounts.numGetOrCreate).."\n numGetUnit="..tostring(TeamsManager.funcCounts.numGetUnit).."\n numValidRules="..tostring(TeamsManager.funcCounts.numValidRules).."\n numGetQueued="..tostring(TeamsManager.funcCounts.numGetQueued).."\n numGetNextAlert="..tostring(TeamsManager.funcCounts.numGetNextAlert).."\n numGetNotifyVars="..tostring(TeamsManager.funcCounts.numGetNotifyVars).."\n numAddAlert="..tostring(TeamsManager.funcCounts.numAddAlert).."\n numAlert="..tostring(TeamsManager.funcCounts.numAlert).."\n numValidIDs="..tostring(TeamsManager.funcCounts.numValidIDs).."\n numMoveUnit="..tostring(TeamsManager.funcCounts.numMoveUnit).."\n numIsAllied="..tostring(TeamsManager.funcCounts.numIsAllied).."\n numIfInitialized="..tostring(TeamsManager.funcCounts.numIfInitialized).."\n numGetArmy="..tostring(TeamsManager.funcCounts.numGetArmy)) end
+	if TeamsManager.config.FunctionRunCounts then Debugger("FunctionRunCounts:\n numArmies="..tostring(TeamsManager.funcCounts.numArmies).."\n numCreateUnit="..tostring(TeamsManager.funcCounts.numCreateUnit)..", numStockpile="..tostring(TeamsManager.funcCounts.numStockpile).."\n numLoaded="..tostring(TeamsManager.funcCounts.numLoaded).."\n numCommands="..tostring(TeamsManager.funcCounts.numCommands).."\n numCkPrst="..tostring(TeamsManager.funcCounts.numCkPrst).."\n numLOS="..tostring(TeamsManager.funcCounts.numLOS).."\n numFinished="..tostring(TeamsManager.funcCounts.numFinished).."\n numCreated="..tostring(TeamsManager.funcCounts.numCreated).."\n numTaken="..tostring(TeamsManager.funcCounts.numTaken).."\n numIdle="..tostring(TeamsManager.funcCounts.numIdle).."\n numDestroyed="..tostring(TeamsManager.funcCounts.numDestroyed).."\n numGetHealth="..tostring(TeamsManager.funcCounts.numGetHealth).."\n numGetCoords="..tostring(TeamsManager.funcCounts.numGetCoords).."\n numHasRules="..tostring(TeamsManager.funcCounts.numHasRules).."\n numSetTypes="..tostring(TeamsManager.funcCounts.numSetTypes).."\n numDamaged="..tostring(TeamsManager.funcCounts.numDamaged).."\n numSetLost="..tostring(TeamsManager.funcCounts.numSetLost).."\n numGetIdle="..tostring(TeamsManager.funcCounts.numGetIdle).."\n numSetNotIdle="..tostring(TeamsManager.funcCounts.numSetNotIdle).."\n numSetIdle="..tostring(TeamsManager.funcCounts.numSetIdle).."\n numHasEventRules="..tostring(TeamsManager.funcCounts.numHasEventRules).."\n numCanAlert="..tostring(TeamsManager.funcCounts.numCanAlert).."\n numGetRulesForEvent="..tostring(TeamsManager.funcCounts.numGetRulesForEvent).."\n numGetOrCreate="..tostring(TeamsManager.funcCounts.numGetOrCreate).."\n numGetUnit="..tostring(TeamsManager.funcCounts.numGetUnit).."\n numValidRules="..tostring(TeamsManager.funcCounts.numValidRules).."\n numGetQueued="..tostring(TeamsManager.funcCounts.numGetQueued).."\n numGetNextAlert="..tostring(TeamsManager.funcCounts.numGetNextAlert).."\n numGetNotifyVars="..tostring(TeamsManager.funcCounts.numGetNotifyVars).."\n numAddAlert="..tostring(TeamsManager.funcCounts.numAddAlert).."\n numAlert="..tostring(TeamsManager.funcCounts.numAlert).."\n numValidIDs="..tostring(TeamsManager.funcCounts.numValidIDs).."\n numMoveUnit="..tostring(TeamsManager.funcCounts.numMoveUnit).."\n numIsAllied="..tostring(TeamsManager.funcCounts.numIsAllied).."\n numIfInitialized="..tostring(TeamsManager.funcCounts.numIfInitialized).."\n numGetArmy="..tostring(TeamsManager.funcCounts.numGetArmy)) end
   if TeamsManager.config.logEvents then
     local gameID = Game.gameID and Game.gameID or Spring.GetGameRulesParam("GameID")
-    saveTable("myData", TeamsManager.config.logEventsTbl, ("ea"..gameID..".lua"))
+    SaveTable("myData", TeamsManager.config.logEventsTbl, ("ea"..gameID..".lua"))
   end
   Spring.Echo(widgetName .. " widget disabled")
 end

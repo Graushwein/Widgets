@@ -1,13 +1,13 @@
 -- Library files should not have GetInfo(), causes crash by caller lua
 
 
-function debugger(...)
+function Debugger(...)
     Spring.Echo(...)
 end
 
-function tableToString(tbl, indent)
+function TableToString(tbl, indent)
   if (type(tbl) == "table" and tbl.isPrototype) or (type(indent) == "table" and indent.isPrototype) then
-    return "DON'T SEND PROTOs TO tableToString FUNCTION. IT WILL CRASH THE GAME!"
+    return "DON'T SEND PROTOs TO TableToString FUNCTION. IT WILL CRASH THE GAME!"
   end
   indent = indent or 4
   local str = ""
@@ -17,7 +17,7 @@ function tableToString(tbl, indent)
   else
     for k, v in pairs(tbl) do
       if (type(k) == "table" and k.isPrototype) or (type(v) == "table" and v.isPrototype) then
-        return "DON'T SEND PROTOs TO tableToString FUNCTION. IT WILL CRASH!"
+        return "DON'T SEND PROTOs TO TableToString FUNCTION. IT WILL CRASH!"
       end
       str = str .. string.rep(".", indent + 1)
       if type(k) == "string" then -- Format key
@@ -26,7 +26,7 @@ function tableToString(tbl, indent)
         str = str .. "[" .. tostring(k) .. "] = "
       end
       if type(v) == "table" then -- Handle different value types
-        str = str .. tableToString(v, indent + 2) .. ",\n" -- Recursively call for nested tables
+        str = str .. TableToString(v, indent + 2) .. ",\n" -- Recursively call for nested tables
       elseif type(v) == "string"then
         str = str .. "\"" .. v .. "\",\n"
       else
@@ -38,14 +38,14 @@ function tableToString(tbl, indent)
   return str
 end
 
-function saveTable(tableName, tableData, filename)
+function SaveTable(tableName, tableData, filename)
     local file = io.open(filename, "w")
     if file then
         file:write("return " .. table.dump(tableData, tableName)) -- Assuming a table.dump function exists
         file:close()
-        debugger("Table saved successfully to", filename)
+        Debugger("Table saved successfully to", filename)
     else
-        debugger("Error: Could not open file for writing.")
+        Debugger("Error: Could not open file for writing.")
     end
 end
 
@@ -98,7 +98,7 @@ end
 
 function minPriorityQueue:insert(value, alertRulesTbl, priority)
   if value == nil or type(priority) ~= "number" or priority < 0 or priority > 99999 then
-    debugger("priorityQueue:insert 1. ERROR. Invalid value or priority="..tostring(priority))
+    Debugger("priorityQueue:insert 1. ERROR. Invalid value or priority="..tostring(priority))
     return nil
   end
   local newNode = Node:new(value, alertRulesTbl, priority)
@@ -109,7 +109,7 @@ end
 function minPriorityQueue:pull(arrNum)
   arrNum = arrNum or 1
   if self:size() == 0 or type(arrNum) ~= "number" or (arrNum < 1 or arrNum > self:size()) then
-    debugger("priorityQueue:pull(). ERROR. Invalid arrNum=" .. tostring(arrNum))
+    Debugger("priorityQueue:pull(). ERROR. Invalid arrNum=" .. tostring(arrNum))
     return nil
   end
   if self:size() == 0 then return nil, 0 end
@@ -120,7 +120,7 @@ end
 function minPriorityQueue:peek(arrNum) -- Returns/Keeps the top/requested element, returning vars: value, alertRulesTbl, priority, queuedTime
   arrNum = arrNum or 1
   if self:isEmpty() or type(arrNum) ~= "number" or arrNum < 1 or arrNum > self:size() then
-    debugger("minPriorityQueue:peek(). ERROR. Invalid arrNum=" .. tostring(arrNum))
+    Debugger("minPriorityQueue:peek(). ERROR. Invalid arrNum=" .. tostring(arrNum))
     return nil
   end
   return self[arrNum].value, self[arrNum].alertRulesTbl, self[arrNum].priority, self[arrNum].queuedTime
@@ -137,17 +137,17 @@ end
 function minPriorityQueue:size()
   return #self
 end
-alertQueue2 = minPriorityQueue:new()
+AlertQueue2 = minPriorityQueue:new()
 -- Example usage:
--- alertQueue2:insert("Task A", {},5)
--- alertQueue2:insert("Task B", {},2)
--- alertQueue2:insert("Task C", {},8)
--- local value, tmpalertRulesTbl, priority = alertQueue2:pull()
--- debugger("Pulled:", tostring(value), "with priority:", tostring(priority)) -- Expect "Task B" (lowest priority)
--- value, tmpalertRulesTbl, priority = alertQueue2:pull()
--- debugger("Pulled:", tostring(value), "with priority:", tostring(priority)) -- Expect "Task A"
--- value, tmpalertRulesTbl, priority = alertQueue2:pull()
--- debugger("Pulled:", tostring(value), "with priority:", tostring(priority)) -- Expect "Task C"
+-- AlertQueue2:insert("Task A", {},5)
+-- AlertQueue2:insert("Task B", {},2)
+-- AlertQueue2:insert("Task C", {},8)
+-- local value, tmpalertRulesTbl, priority = AlertQueue2:pull()
+-- Debugger("Pulled:", tostring(value), "with priority:", tostring(priority)) -- Expect "Task B" (lowest priority)
+-- value, tmpalertRulesTbl, priority = AlertQueue2:pull()
+-- Debugger("Pulled:", tostring(value), "with priority:", tostring(priority)) -- Expect "Task A"
+-- value, tmpalertRulesTbl, priority = AlertQueue2:pull()
+-- Debugger("Pulled:", tostring(value), "with priority:", tostring(priority)) -- Expect "Task C"
 
 local priorityQueue = {}
 priorityQueue.__index = priorityQueue
@@ -160,7 +160,7 @@ function priorityQueue:new()
 end
 function priorityQueue:insert(value, alertRulesTbl, priority) -- alertRulesTbl should have all (key,pair) vars that can be used to determine whether and how to alert key,pair: {teamID, unitType, event, lastNotify, sharedAlerts, priority, reAlertSec, maxAlerts, alertCount, maxQueueTime, alertSound, mark, ping, threshMinPerc, threshMaxPerc}
   if value == nil or type(priority) ~= "number" or priority < 0 or priority > 99999 then
-    debugger("priorityQueue:insert 1. ERROR. Invalid value or priority="..tostring(priority))
+    Debugger("priorityQueue:insert 1. ERROR. Invalid value or priority="..tostring(priority))
     return nil
   end
   self.size = self.size + 1
@@ -190,7 +190,7 @@ end
 
 function priorityQueue:peek(heapNum) -- Returns/Keeps the top/requested element, returning vars: value, alertRulesTbl, priority, queuedTime
   if self:isEmpty() or type(heapNum) ~= "number" or heapNum < 1 or heapNum > self.size then
-    debugger("priorityQueue:peek(). ERROR. Invalid heapNum=" .. tostring(heapNum))
+    Debugger("priorityQueue:peek(). ERROR. Invalid heapNum=" .. tostring(heapNum))
     return nil, nil, nil, nil
   end
   heapNum = heapNum or 1
@@ -230,7 +230,7 @@ function priorityQueue:_sink(k)
     k = j
   end
 end
-alertQueue = priorityQueue:new()
+AlertQueue = priorityQueue:new()
 
 local function clone( base_object, clone_object )
   if type( base_object ) ~= "table" then
@@ -255,14 +255,14 @@ local function isa( clone_object, base_object )
   end
   return _isa
 end
-protoObject = clone( table, { clone = clone, isa = isa } )
-protoObject.isPrototype = true
+ProtoObject = clone( table, { clone = clone, isa = isa } )
+ProtoObject.isPrototype = true
 -- var = protoObject:clone()
 
-function alertPointer(x, y, z, pointerText, localOnly)
-  if debug then debugger("alertPointer 1. coords="..tostring(x)..", "..tostring(y)..", "..tostring(z)..", pointerText="..tostring(pointerText)..", localOnly="..tostring(localOnly)) end
+function AlertPointer(x, y, z, pointerText, localOnly)
+  if debug then Debugger("alertPointer 1. coords="..tostring(x)..", "..tostring(y)..", "..tostring(z)..", pointerText="..tostring(pointerText)..", localOnly="..tostring(localOnly)) end
   if type(x) ~= "number" or type(y) ~= "number" or type(z) ~= "number" or x < 0 then
-    debugger("alertPointer 2. ERROR. Invalid coordinates=" .. tostring(x) .. ", " .. tostring(y))
+    Debugger("alertPointer 2. ERROR. Invalid coordinates=" .. tostring(x) .. ", " .. tostring(y))
     return false
   end
   pointerText = type(pointerText) == "string" and pointerText or ""
@@ -271,27 +271,27 @@ function alertPointer(x, y, z, pointerText, localOnly)
   return true
 end
 
-function alertSound(soundPath, volume)
+function AlertSound(soundPath, volume)
   volume = volume or 1
-  if debug then debugger("alertSound 1. soundPath=" .. tostring(soundPath)..", volume="..tostring(volume)) end
+  if debug then Debugger("alertSound 1. soundPath=" .. tostring(soundPath)..", volume="..tostring(volume)) end
   if type(soundPath) ~= "string" or volume ~= nil and (type(volume) ~= "number" or volume < 0 or volume > 1) then
-    debugger("alert 2. ERROR. Invalid volume or soundPath=" .. tostring(soundPath)..", volume="..tostring(volume))
+    Debugger("alert 2. ERROR. Invalid volume or soundPath=" .. tostring(soundPath)..", volume="..tostring(volume))
     return nil
   end
     Spring.PlaySoundFile(soundPath, 1.0, 'ui')
   return true
 end
 
-function alertMessage(message, toWhom) -- string message, ["me" | "all" | "allies" | "spectators"]
-  if debug then debugger("alertMessage 1. alertMessage=" .. tostring(message)..", toWhom="..tostring(toWhom)) end
+function AlertMessage(message, toWhom) -- string message, ["me" | "all" | "allies" | "spectators"]
+  if debug then Debugger("alertMessage 1. alertMessage=" .. tostring(message)..", toWhom="..tostring(toWhom)) end
   toWhom = toWhom or "me"
   if type(message) ~= "string" or message == "" or (type(toWhom) ~= "string" and toWhom ~= nil) or (toWhom ~= "me" and toWhom ~= "all" and toWhom ~= "allies" and toWhom ~= "spectators") then
-    debugger("alertMessage 2. ERROR. Invalid toWhom or message=" .. tostring(message)..", toWhom="..tostring(toWhom))
+    Debugger("alertMessage 2. ERROR. Invalid toWhom or message=" .. tostring(message)..", toWhom="..tostring(toWhom))
     return nil
   end
   local isSpectator = Spring.GetSpectatingState()
   if not toWhom == "me" and not toWhom == "all" and not toWhom == "allies" and not toWhom == "spectators"  then
-    debugger("alertMessage 3. ERROR. toWhom must be: me, all, allies, or spectators." .. tostring(message)..", toWhom="..tostring(toWhom))
+    Debugger("alertMessage 3. ERROR. toWhom must be: me, all, allies, or spectators." .. tostring(message)..", toWhom="..tostring(toWhom))
   elseif toWhom == "me" then
     Spring.SendMessageToPlayer(Spring.GetMyPlayerID(), message) -- "me" myPlayerID
   elseif not isSpectator and toWhom == "all" then
@@ -301,12 +301,12 @@ function alertMessage(message, toWhom) -- string message, ["me" | "all" | "allie
   elseif toWhom == "spectators" then
     Spring.SendMessageToSpectators(message) -- "spectators"
   else
-    debugger("alertMessage 4. ERROR. Spectators should not talk to players!" .. tostring(message)..", toWhom="..tostring(toWhom))
+    Debugger("alertMessage 4. ERROR. Spectators should not talk to players!" .. tostring(message)..", toWhom="..tostring(toWhom))
   end
   return true
 end
 
 
 -- return {
---   debugger = debugger
+--   Debugger = Debugger
 -- }
