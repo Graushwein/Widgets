@@ -20,9 +20,11 @@ Just use the premade events and rules like this:
   
 Installation: 
 * [Download Easy Alerts](https://github.com/Graushwein/Widgets/archive/refs/tags/1.0.zip) and unzip
-* In the "...\Beyond-All-Reason\data\LuaUI" folder, make a folder called "easy_alerts_utils", and place the "_lib.lua" files in it
 * Drop "Easy_Alerts_Debug.lua" into BAR's "widgets" folder. (...\Beyond-All-Reason\data\LuaUI\Widgets)
 * Customizing Alerts: Open the file, customize your rules using the istructions below, save the file.
+
+If you choose to download the most recent version above:
+* In the "...\Beyond-All-Reason\data\LuaUI" folder, make a folder called "easy_alerts_utils", and place the "_lib.lua" files in it
 
 ### The Unit Alert Structure: -- {unitType = {event1 = {rules1}, {event2 = {rules2}}}}
 * **Who**: When playing (Player, Ally, Enemy), and spectating (Spectator)
