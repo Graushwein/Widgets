@@ -35,15 +35,15 @@ local anotherInclude = {}
 
 -- normal widget stuff
 -- local my_lib = VFS.Include("LuaUI/Widgets/easy_alerts_debug.lua")
--- my_lib.teamsManager:makeAllArmies()
+-- my_lib.TeamsManager:makeAllArmies()
 -- my_lib.debugger("test")
 -- normal widget stuff
 
 -- local libFuncs = VFS.Include("LuaUI/Widgets/easy_alerts_debug.lua")
 
--- libFuncs.teamsManager:makeAllArmies()
+-- libFuncs.TeamsManager:makeAllArmies()
 
--- libFuncs.debugger("teamsManager.myArmyManager.teamID="..tostring(libFuncs.teamsManager.myArmyManager.teamID))
+-- libFuncs.debugger("TeamsManager.myArmyManager.teamID="..tostring(libFuncs.TeamsManager.myArmyManager.teamID))
 
 
 -- local libFuncs2 = {message="aMessage"}
@@ -53,7 +53,6 @@ local anotherInclude = {}
 
 
 local warnFrame = 0
-local isSpectator
 
 -- tableToString(tbl, indent)
 
@@ -67,12 +66,12 @@ local isSpectator
 --   funcCounts.numCkPrst = funcCounts.numCkPrst + 1
 --   if debug then debugger("checkPersistentEvents 1.") end
 --   local armiesToCheck
---   if isSpectator then
---     if debug then debugger("checkPersistentEvents 2. isSpectator, using all armies.") end
---     armiesToCheck = teamsManager.armies
+--   if IsSpectator then
+--     if debug then debugger("checkPersistentEvents 2. IsSpectator, using all armies.") end
+--     armiesToCheck = TeamsManager.armies
 --   else
 --     if debug then debugger("checkPersistentEvents 2. Is Player, using myArmyManager.") end
---     armiesToCheck = {myTeamID = teamsManager.myArmyManager}
+--     armiesToCheck = {myTeamID = TeamsManager.myArmyManager}
 --   end
 --   local deadUnits = {} -- ensure dead units get removed from persistently checked tables
 --   for _, anArmyManager in pairs(armiesToCheck) do
@@ -82,12 +81,12 @@ local isSpectator
 --           if Spring.GetUnitIsDead(unitID) then
 --             if debug then debugger("checkPersistentEvents 3. Dead Unit found.") end
 --             deadUnits[unitID] = unit
---           elseif not teamsManager:getQueuedEvents(unit,nil,nil,"idle") and unit:getIdle() == true then
+--           elseif not TeamsManager:getQueuedEvents(unit,nil,nil,"idle") and unit:getIdle() == true then
 --             if debug then debugger("checkPersistentEvents 4. Builder idle. unitID=" ..tostring(unitID) .. ", defID=" ..tostring(unit.defID) .. ", teamID=" .. tostring(unit.parent.teamID)) end
 --             local typeRules = unit:getTypesRulesForEvent("idle", true, true)
 --             if typeRules then
 --               if debug then debugger("checkPersistentEvents 5. CanAlertNow for idle. Going to addUnitToAlertQueue.") end
---               teamsManager:addUnitToAlertQueue(unit, typeRules)
+--               TeamsManager:addUnitToAlertQueue(unit, typeRules)
 --             end
 --           end
 --         end
@@ -99,7 +98,7 @@ local isSpectator
 --             deadUnits[unitID] = unit
 --           else
 --             if debug then debugger("checkPersistentEvents 5. Checking thresholdHP. unitID=" ..tostring(unitID) .. ", defID=" ..tostring(unit.defID) .. ", teamID=" .. tostring(unit.parent.teamID) .. ", translatedHumanName=" .. tostring(UnitDefs[unit.defID].translatedHumanName)) end
---             if not teamsManager:getQueuedEvents(unit,nil,nil,"thresholdHP") then
+--             if not TeamsManager:getQueuedEvents(unit,nil,nil,"thresholdHP") then
 --               unit:getHealth() -- automatically alerts
 --             end
 --           end
@@ -123,14 +122,14 @@ local isSpectator
 --   if warnFrame == 1 then -- with 30 updateInterval, run roughlys every half second
 --     -- checkPersistentEvents()
 --     -- if alertQueue:getSize() > 0 then
---     --   teamsManager:alert()
+--     --   TeamsManager:alert()
 --     -- end
 --   end
 --   warnFrame = (warnFrame + 1) % updateInterval
 -- end
 
 function widget:PlayerChanged(playerID)
-	isSpectator = Spring.GetSpectatingState()
+	IsSpectator = Spring.GetSpectatingState()
 end
 
 function widget:Initialize()
@@ -139,10 +138,10 @@ function widget:Initialize()
 -- 		debugger("makeRelTeamDefsRules() or loadCustomGroups() returned FALSE. Fix trackMyTypesRules, trackAllyTypesRules, trackEnemyTypesRules, or custom group tables tables.")
 -- 		widgetHandler:RemoveWidget()
 -- 	end
---   teamsManager:makeAllArmies() -- Build all teams/armies
+--   TeamsManager:makeAllArmies() -- Build all teams/armies
 	Spring.Echo("Starting " .. widgetName)
   local gameID = Game.gameID and Game.gameID or Spring.GetGameRulesParam("GameID")
-	if true then Spring.Echo("widget:Initialize 1. isSpectator="..tostring(isSpectator)..", gameID="..tostring(gameID)) end
+	if true then Spring.Echo("widget:Initialize 1. IsSpectator="..tostring(IsSpectator)..", gameID="..tostring(gameID)) end
   -- doTesting()
   -- debug = true
   return

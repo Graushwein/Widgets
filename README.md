@@ -23,7 +23,7 @@ Installation:
 * Drop "Easy_Alerts.lua" into BAR's "widgets" folder. (...\Beyond-All-Reason\data\LuaUI\Widgets)
 * Customizing Alerts: Open the file, customize your rules using the istructions below, save the file.
 
-### The Unit Alert Structure: -- {unitType = {event1 = {rules1}, {event2 = {rules2}}}
+### The Unit Alert Structure: -- {unitType = {event1 = {rules1}, {event2 = {rules2}}}}
 * **Who**: When playing (Player, Ally, Enemy), and spectating (Spectator)
 * **Unit Type**: A group of units belonging to a category, like: commander, constructor, groundUnits, and groundT1
 * **Event**: A trigger linked to the Unit Type defining what events require Easy Alerts to take action, like: finished, idle, and destroyed. Multiple Events are allowed, but must be unique for the Unit Type.
@@ -48,7 +48,7 @@ Installation:
 * **destroyed**: Unit is destroyed.
 * **los**: Line Of Sight. Happens when an enemy unit is fully seen (not on radar) by an allied unit. "enemyCommanderRules" has an example.
 * **taken**: Captured. (untested) When you are the player, having the rule in the enemy rules section would alert when you/ally capture it, "my" or "ally" rules would be when the enemy captures it from you/ally. When spectating, it knows based on the teams.
-* **given**: Given between allies. (untested) Use "my" rules to alert when that type is given to you, and "ally" rules when you give to an ally. When spectating, it knows based on the teams.
+* **given**: Given between allies. (untested) Use "ally" rules to alert when that type is given to you, and "my" rules when you give to an ally. When spectating, it should just work.
 * **loaded**: Unit loaded into a transport. Mostly for spectating, or to know your ally is doing it, because enemies usually load up out of sight (meaning BAR doesn't tell you because that'd be cheating). This is why there's a default "los" enemy commander rule.
 * **stockpile**: A unit's ammo increases/decreases. Useful to remind you when the nuke is done charging up or being used. Currently, a nuke building for example, it will alert when your/ally's unit is ready to fire AND possibly (depending on the reAlert rule) when it is fired.
 * **thresholdHP**: A unit's health percent is below what's defined in the "threshMinPerc" rule, which must be: 0 < "threshMinPerc" < 1.

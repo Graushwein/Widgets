@@ -282,7 +282,6 @@ function alertSound(soundPath, volume)
   return true
 end
 
--- THIS WOULD NEED TO BE SEPARATED
 function alertMessage(message, toWhom) -- string message, ["me" | "all" | "allies" | "spectators"]
   if debug then debugger("alertMessage 1. alertMessage=" .. tostring(message)..", toWhom="..tostring(toWhom)) end
   toWhom = toWhom or "me"
