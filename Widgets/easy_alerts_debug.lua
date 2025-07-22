@@ -336,15 +336,15 @@ function widget:StockpileChanged(unitID, defID, teamID, weaponNum, oldCount, new
   end
 end
 
--- function widget:GameFrame(frame)
---   if warnFrame == 1 then -- with 30 UpdateInterval, run roughlys every half second
---     checkPersistentEvents()
---     if AlertQueue:getSize() > 0 then
---       tmsMgr:alert()
---     end
---   end
---   warnFrame = (warnFrame + 1) % UpdateInterval
--- end
+function widget:GameFrame(frame)
+  if warnFrame == 1 then -- with 30 UpdateInterval, run roughlys every half second
+    checkPersistentEvents()
+    if AlertQueue:getSize() > 0 then
+      tmsMgr:alert()
+    end
+  end
+  warnFrame = (warnFrame + 1) % UpdateInterval
+end
 
 function widget:PlayerChanged(playerID)
   MyTeamID = Spring.GetMyTeamID()

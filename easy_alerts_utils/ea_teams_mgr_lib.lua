@@ -824,13 +824,13 @@ end
 function TeamsManager:Initialize(playerEvents,allyEvents,enemyEvents,spectatorEvents, playerCustGrps, allyCustGrps, enemyCustGrps, spectatorCustGrps)
   if debug then Debugger("Initialize 1.") end
   if (not IsSpectator and type(playerEvents) ~= "table") or (IsSpectator and type(spectatorEvents) ~= "table") then
-    if debug then Debugger("Initialize 2. playerEvents or spectatorEvents not table. Disabling events.") end
+    if true then Debugger("Initialize 2. playerEvents or spectatorEvents not table. Disabling events.") end
     self.config.enabledEventRules = false
   else
     if debug then Debugger("Initialize 3. playerEvents or spectatorEvents is table. Enabling events.") end
     self.config.enabledEventRules = true
     if not TeamsManager:loadCustomGroups(playerEvents,allyEvents,enemyEvents,spectatorEvents, playerCustGrps, allyCustGrps, enemyCustGrps, spectatorCustGrps) or not TeamsManager:makeRelTeamDefsRules(playerEvents, allyEvents, enemyEvents, spectatorEvents,playerCustGrps,allyCustGrps,enemyCustGrps,spectatorCustGrps) then
-      if debug then Debugger("Initialize 4. loadCustomGroups failed. Returning nil.") end
+      Debugger("Initialize 4. loadCustomGroups failed. Returning nil.")
       return nil
     end
   end
