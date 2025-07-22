@@ -17,6 +17,7 @@ local soundVolume = 1.0 -- Set the volume between 0.0 and 1.0. NOT USED
 
 UpdateInterval = 30
 
+-- TeamsManager.config.enabledEventRules = true -- No need to use this. It is automatically set by providing Initialize typesRules or nil
 TeamsManager.config.minReAlertSec = 3 -- to prevent a bunch at once
 TeamsManager.config.deleteDestroyed = false -- For possible RAM concerns. Though, in the few small tests I tried it didn't seem to save more RAM
 TeamsManager.config.FunctionRunCounts = false
@@ -34,9 +35,9 @@ debug = false
 -- {unitType = {event = {rules}}}
 -- NOTICE: I recommend using "thresholdHP" instead of "damaged" events. "damaged" are disabled by default, for very late game performance concerns. (I haven't done any testing though.) To enable, go to "function widget:UnitDamaged(" and remove the "--" from all lines in the function block
 local myCommanderRules = {thresholdHP = {reAlertSec=60, mark="Commander In Danger", alertSound="sounds/commands/cmd-selfd.wav", threshMinPerc=.6, priority=0}} -- damaged = {reAlertSec=30} Towards the end of games there's a lot of damage, so I recommend using "thresholdHP" for the few units you care about -- will sound alert when Commander idle/15 secs, (re)damaged once per 30 seconds (unlimited), and when damage causes HP to be under x%
-local myConstructorRules = {idle = {sharedAlerts=true, reAlertSec=20, mark="Con Idle", alertDelay=.1}, destroyed = {mark="Con Lost"}, given = {mark="Con Given"}}
-local myFactoryRules = {idle = {sharedAlerts=true, reAlertSec=20, mark="Idle Factory", alertDelay=.1}}
-local myRezBotRules = {idle = {sharedAlerts=true, reAlertSec=20, alertDelay=.1, messageTo="me",messageTxt="RezBot Idle"}}
+local myConstructorRules = {idle = {sharedAlerts=true, reAlertSec=60, mark="Con Idle", alertDelay=.1}, destroyed = {mark="Con Lost"}, given = {mark="Con Given"}}
+local myFactoryRules = {idle = {sharedAlerts=true, reAlertSec=60, mark="Idle Factory", alertDelay=.1}}
+local myRezBotRules = {idle = {sharedAlerts=true, reAlertSec=60, alertDelay=.1, messageTo="me",messageTxt="RezBot Idle"}}
 local myMexRules = {destroyed = {reAlertSec=5, mark="Mex Lost"}, taken = {mark="Mex Taken"}}
 local myRadarRules = {destroyed = {mark="Radar Lost"}}
 local myNukeRules = {stockpile = {messageTo="me", messageTxt="Nuke Ready", mark="Nuke Ready", alertSound="sounds/commands/cmd-selfd.wav"}}
@@ -44,16 +45,20 @@ local myNukeRules = {stockpile = {messageTo="me", messageTxt="Nuke Ready", mark=
 local myEnergyGenT2Rules = {}; local myAntiNukeRules = {}; local myFactoryT1Rules = {}; local myFactoryT2Rules = {}; local myFactoryT3Rules = {}; local myMexT1Rules = {}; local myMexT2Rules = {}; local myEnergyGenRules = {}; local myEnergyGenT1Rules = {}; local myAllMobileUnitsRules = {}; local myUnitsT1Rules = {}; local myUnitsT2Rules = {}; local myUnitsT3Rules = {}; local myHoverUnitsRules = {}; local myWaterUnitsRules = {}; local myWaterT1Rules = {}; local myWaterT2Rules = {}; local myWaterT3Rules = {}; local myGroundUnitsRules = {}; local myGroundT1Rules = {}; local myGroundT2Rules = {}; local myGroundT3Rules = {}; local myAirUnitsRules = {}; local myAirT1Rules = {}; local myAirT2Rules = {}; local myAirT3Rules = {}
 local trackMyTypesRules = {commander = myCommanderRules, constructor = myConstructorRules, factory = myFactoryRules, rezBot = myRezBotRules,	mex = myMexRules, energyGenT2 = myEnergyGenT2Rules,radar = myRadarRules, nuke = myNukeRules, antiNuke = myAntiNukeRules, factoryT1 = myFactoryT1Rules, factoryT2 = myFactoryT2Rules, factoryT3 = myFactoryT3Rules, mexT1 = myMexT1Rules, mexT2 = myMexT2Rules, energyGen = myEnergyGenRules, energyGenT1 = myEnergyGenT1Rules, allMobileUnits = myAllMobileUnitsRules, unitsT1 = myUnitsT1Rules, unitsT2 = myUnitsT2Rules, unitsT3 = myUnitsT3Rules, hoverUnits = myHoverUnitsRules, waterUnits = myWaterUnitsRules, waterT1 = myWaterT1Rules, waterT2 = myWaterT2Rules, waterT3 = myWaterT3Rules, groundUnits = myGroundUnitsRules, groundT1 = myGroundT1Rules, groundT2 = myGroundT2Rules, groundT3 = myGroundT3Rules, airUnits = myAirUnitsRules, airT1 = myAirT1Rules, airT2 = myAirT2Rules, airT3 = myAirT3Rules}
 
+-- TeamsManager.eventRules["trackMyTypesRules"] = trackMyTypesRules
+
 -- allyRules
 local allyCommanderRules = {} -- Must have a rule to make it track the units. No alert means it only destroyed enemy mex will be tracked. To have it track alive mex, use "los"
 local allyFactoryT2Rules = {finished = {sharedAlerts=true, maxAlerts=1, mark="T2 Ally Factory", alertDelay=30, messageTo="me", messageTxt="T2 Ally"}} -- So you can badger them for a T2 constructor ;)
-local allyMexRules = {destroyed = {sharedAlerts=true, mark="Ally Mex Lost", alertDelay=30}}
-local allyEnergyGenT2Rules = {destroyed = {sharedAlerts=true, mark="Ally Fusion Lost", alertDelay=30}}
-local allyRadarRules = {destroyed = {sharedAlerts=true, mark="Ally Radar Lost", alertDelay=30}}
-local allyNukeRules = {stockpile = {sharedAlerts=true, alertDelay=30, messageTo="me", messageTxt="Ally Nuke Ready", alertSound="sounds/commands/cmd-selfd.wav"}}
+local allyMexRules = {destroyed = {sharedAlerts=true, mark="Ally Mex Lost"}}
+local allyEnergyGenT2Rules = {destroyed = {sharedAlerts=true, mark="Ally Fusion Lost"}}
+local allyRadarRules = {destroyed = {sharedAlerts=true, mark="Ally Radar Lost"}} -- , alertDelay=30
+local allyNukeRules = {stockpile = {sharedAlerts=true, messageTo="me", messageTxt="Ally Nuke Ready", alertSound="sounds/commands/cmd-selfd.wav"}}
 
 local allyRezBotRules = {}; local allyFactoryRules = {}; local allyConstructorRules = {}; local allyAntiNukeRules = {}; local allyFactoryT1Rules = {}; local allyFactoryT3Rules = {}; local allyMexT1Rules = {}; local allyMexT2Rules = {}; local allyEnergyGenRules = {}; local allyEnergyGenT1Rules = {}; local allyAllMobileUnitsRules = {}; local allyUnitsT1Rules = {}; local allyUnitsT2Rules = {}; local allyUnitsT3Rules = {}; local allyHoverUnitsRules = {}; local allyWaterUnitsRules = {}; local allyWaterT1Rules = {}; local allyWaterT2Rules = {}; local allyWaterT3Rules = {}; local allyGroundUnitsRules = {}; local allyGroundT1Rules = {}; local allyGroundT2Rules = {}; local allyGroundT3Rules = {}; local allyAirUnitsRules = {}; local allyAirT1Rules = {}; local allyAirT2Rules = {}; local allyAirT3Rules = {}
 local trackAllyTypesRules = {commander = allyCommanderRules, constructor = allyConstructorRules, factory = allyFactoryRules, factoryT2 = allyFactoryT2Rules, rezBot = allyRezBotRules, mex = allyMexRules, energyGenT2 = allyEnergyGenT2Rules, radar = allyRadarRules, nuke = allyNukeRules, antiNuke = allyAntiNukeRules, factoryT1 = allyFactoryT1Rules, factoryT3 = allyFactoryT3Rules, mexT1 = allyMexT1Rules, mexT2 = allyMexT2Rules, energyGen = allyEnergyGenRules, energyGenT1 = allyEnergyGenT1Rules, allMobileUnits = allyAllMobileUnitsRules, unitsT1 = allyUnitsT1Rules, unitsT2 = allyUnitsT2Rules, unitsT3 = allyUnitsT3Rules, hoverUnits = allyHoverUnitsRules, waterUnits = allyWaterUnitsRules, waterT1 = allyWaterT1Rules, waterT2 = allyWaterT2Rules, waterT3 = allyWaterT3Rules, groundUnits = allyGroundUnitsRules, groundT1 = allyGroundT1Rules, groundT2 = allyGroundT2Rules, groundT3 = allyGroundT3Rules, airUnits = allyAirUnitsRules, airT1 = allyAirT1Rules, airT2 = allyAirT2Rules, airT3 = allyAirT3Rules}
+
+-- TeamsManager.eventRules["trackAllyTypesRules"] = trackAllyTypesRules
 
 -- enemyRules
 local enemyCommanderRules = {los = {reAlertSec=60, mark="Commander", priority=0, messageTo="me",messageTxt="Get em!"} } -- will mark "Commander" at location when (re)enters LoS, once per 30 seconds (unlimited)
@@ -63,6 +68,8 @@ local enemyNukeRules = {los = {sharedAlerts=true, maxAlerts=1, reAlertSec=1, mar
 
 local enemyConstructorRules = {}; local enemyRadarRules = {}; local enemyUnitsT2Rules = {}; local enemyUnitsT3Rules = {}; local enemyFactoryRules = {}; local enemyMexRules = {}; local enemyEnergyGenT2Rules = {}; local enemyRezBotRules = {}; local enemyFactoryT1Rules = {}; local enemyFactoryT3Rules = {}; local enemyMexT1Rules = {}; local enemyMexT2Rules = {}; local enemyEnergyGenRules = {}; local enemyEnergyGenT1Rules = {}; local enemyAllMobileUnitsRules = {}; local enemyUnitsT1Rules = {}; local enemyHoverUnitsRules = {}; local enemyWaterUnitsRules = {}; local enemyWaterT1Rules = {}; local enemyWaterT2Rules = {}; local enemyWaterT3Rules = {}; local enemyGroundUnitsRules = {}; local enemyGroundT1Rules = {}; local enemyGroundT2Rules = {}; local enemyGroundT3Rules = {}; local enemyAirUnitsRules = {}; local enemyAirT1Rules = {}; local enemyAirT2Rules = {}; local enemyAirT3Rules = {}
 local trackEnemyTypesRules = {commander = enemyCommanderRules, constructor = enemyConstructorRules, rezBot = enemyRezBotRules, radar = enemyRadarRules, nuke = enemyNukeRules, antiNuke = enemyAntiNukeRules, factory = enemyFactoryRules, factoryT1 = enemyFactoryT1Rules, factoryT2 = enemyFactoryT2Rules, factoryT3 = enemyFactoryT3Rules, mex = enemyMexRules, mexT1 = enemyMexT1Rules, mexT2 = enemyMexT2Rules, energyGen = enemyEnergyGenRules, energyGenT1 = enemyEnergyGenT1Rules, energyGenT2 = enemyEnergyGenT2Rules, allMobileUnits = enemyAllMobileUnitsRules, unitsT1 = enemyUnitsT1Rules, unitsT2 = enemyUnitsT2Rules, unitsT3 = enemyUnitsT3Rules, hoverUnits = enemyHoverUnitsRules, waterUnits = enemyWaterUnitsRules, waterT1 = enemyWaterT1Rules, waterT2 = enemyWaterT2Rules, waterT3 = enemyWaterT3Rules, groundUnits = enemyGroundUnitsRules, groundT1 = enemyGroundT1Rules, groundT2 = enemyGroundT2Rules, groundT3 = enemyGroundT3Rules, airUnits = enemyAirUnitsRules, airT1 = enemyAirT1Rules, airT2 = enemyAirT2Rules, airT3 = enemyAirT3Rules}
+
+-- TeamsManager.eventRules["trackEnemyTypesRules"] = trackEnemyTypesRules
 
 -- spectatorRules
 local spectatorCommanderRules = {thresholdHP = {reAlertSec=120, threshMinPerc=.6, mark="Commander In Danger", alertSound="sounds/commands/cmd-selfd.wav", priority=1}, loaded = {mark="Com-Drop", alertSound="sounds/commands/cmd-selfd.wav", priority=1}}
@@ -80,15 +87,22 @@ local spectatorRFLRPCRules = {created = {sharedAlerts=true, maxAlerts=5, mark="R
 local spectatorFactoryRules = {}; local spectatorRezBotRules = {}; local spectatorMexRules = {}; local spectatorUnitsT2Rules = {}; local spectatorUnitsT3Rules = {}; local spectatorFactoryT1Rules = {}; local spectatorMexT1Rules = {}; local spectatorEnergyGenRules = {}; local spectatorEnergyGenT1Rules = {}; local spectatorAllMobileUnitsRules = {}; local spectatorUnitsT1Rules = {}; local spectatorHoverUnitsRules = {}; local spectatorWaterUnitsRules = {}; local spectatorWaterT1Rules = {}; local spectatorWaterT2Rules = {}; local spectatorWaterT3Rules = {}; local spectatorGroundUnitsRules = {}; local spectatorGroundT1Rules = {}; local spectatorGroundT2Rules = {}; local spectatorGroundT3Rules = {}; local spectatorAirUnitsRules = {}; local spectatorAirT1Rules = {}; local spectatorAirT2Rules = {}; local spectatorAirT3Rules = {}
 local trackSpectatorTypesRules = {commander = spectatorCommanderRules, constructor = spectatorConstructorRules, rezBot = spectatorRezBotRules, radar = spectatorRadarRules, nuke = spectatorNukeRules, antiNuke = spectatorAntiNukeRules, factory = spectatorFactoryRules, factoryT1 = spectatorFactoryT1Rules, factoryT2 = spectatorFactoryT2Rules, factoryT3 = spectatorFactoryT3Rules, mex = spectatorMexRules, mexT1 = spectatorMexT1Rules, mexT2 = spectatorMexT2Rules, energyGen = spectatorEnergyGenRules, energyGenT1 = spectatorEnergyGenT1Rules, energyGenT2 = spectatorEnergyGenT2Rules, allMobileUnits = spectatorAllMobileUnitsRules, unitsT1 = spectatorUnitsT1Rules, unitsT2 = spectatorUnitsT2Rules, unitsT3 = spectatorUnitsT3Rules, hoverUnits = spectatorHoverUnitsRules, waterUnits = spectatorWaterUnitsRules, waterT1 = spectatorWaterT1Rules, waterT2 = spectatorWaterT2Rules, waterT3 = spectatorWaterT3Rules, groundUnits = spectatorGroundUnitsRules, groundT1 = spectatorGroundT1Rules, groundT2 = spectatorGroundT2Rules, groundT3 = spectatorGroundT3Rules, airUnits = spectatorAirUnitsRules, airT1 = spectatorAirT1Rules, airT2 = spectatorAirT2Rules, airT3 = spectatorAirT3Rules, LRPC = spectatorLRPCRules, RFLRPC = spectatorRFLRPCRules}
 
+-- TeamsManager.eventRules["trackSpectatorTypesRules"] = trackSpectatorTypesRules
+
 -- Example custom group below: CustomGroups = {["groupName1"] = {["unitNames"] = {"termite", "mammoth"}, ["eventsRules"] = {["idle"] = {mark = "Custom Group Test"}}}, ["groupName2"] = {["unitNames"] = {"guard", "twin guard"}, ["eventsRules"] = {["destroyed"] = {mark = "Custom Group Test"}}}}
 local myCustomGroups = {}
 local allyCustomGroups = {}
 local enemyCustomGroups = {}
 local spectatorCustomGroups = {}
 
-local warnFrame = 0
+-- TeamsManager.eventRules["myCustomGroups"] = myCustomGroups
+-- TeamsManager.eventRules["allyCustomGroups"] = allyCustomGroups
+-- TeamsManager.eventRules["enemyCustomGroups"] = enemyCustomGroups
+-- TeamsManager.eventRules["spectatorCustomGroups"] = spectatorCustomGroups
+
 -- ################################################## Config variables ends here ##################################################
--- DONT change code below this if you are not sure what you are doing
+-- DON'T change code below this if you are not sure what you are doing
+local warnFrame = 0
 
 -- Newly added event events/rules will need to be added here
 -- most TeamsManager.validEventRules are used in getEventRulesNotifyVars(typeEventRulesTbl, unitObj)
@@ -322,15 +336,15 @@ function widget:StockpileChanged(unitID, defID, teamID, weaponNum, oldCount, new
   end
 end
 
-function widget:GameFrame(frame)
-  if warnFrame == 1 then -- with 30 UpdateInterval, run roughlys every half second
-    checkPersistentEvents()
-    if AlertQueue:getSize() > 0 then
-      tmsMgr:alert()
-    end
-  end
-  warnFrame = (warnFrame + 1) % UpdateInterval
-end
+-- function widget:GameFrame(frame)
+--   if warnFrame == 1 then -- with 30 UpdateInterval, run roughlys every half second
+--     checkPersistentEvents()
+--     if AlertQueue:getSize() > 0 then
+--       tmsMgr:alert()
+--     end
+--   end
+--   warnFrame = (warnFrame + 1) % UpdateInterval
+-- end
 
 function widget:PlayerChanged(playerID)
   MyTeamID = Spring.GetMyTeamID()
@@ -339,16 +353,14 @@ end
 
 function widget:Initialize()
   widget:PlayerChanged()
+	Spring.Echo("Starting " .. widgetName)
   tmsMgr = TeamsManager:Initialize(trackMyTypesRules, trackAllyTypesRules, trackEnemyTypesRules, trackSpectatorTypesRules, myCustomGroups,allyCustomGroups,enemyCustomGroups,spectatorCustomGroups)
 	if not tmsMgr then
     Debugger("makeRelTeamDefsRules() or loadCustomGroups() returned FALSE. Fix trackMyTypesRules, trackAllyTypesRules, trackEnemyTypesRules, or custom group tables tables.")
-    
+    widget:Shutdown()
   end
-	Spring.Echo("Starting " .. widgetName)
-
   local gameID = Game.gameID and Game.gameID or Spring.GetGameRulesParam("GameID")
 	if true then Debugger("widget:Initialize 1. gameID="..tostring(gameID)..", IsSpectator="..tostring(IsSpectator)) end --  .. ", translatedHumanName=" .. tostring(UnitDefs[defID].translatedHumanName)
-  -- doTesting()
   -- debug = true
   return
   --   -- TODO: Maybe. Load All Units if replay or starting mid-game ########## 
