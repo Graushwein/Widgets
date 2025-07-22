@@ -301,7 +301,7 @@ function widget:CommandsChanged() -- Called when the command descriptions change
       end
     end
   end
-  AlertMessage("Easy Alerts is fully running :( ", "me")
+  -- AlertMessage("Easy Alerts is fully running :( ", "me")
 end
 
 function widget:UnitLoaded(unitID, defID, teamID, transportID, transportTeamID) -- Called when a unit is loaded by a transport.
