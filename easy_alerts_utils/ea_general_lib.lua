@@ -272,13 +272,13 @@ function AlertPointer(x, y, z, pointerText, localOnly)
 end
 
 function AlertSound(soundPath, volume)
-  volume = volume or 1
+  volume = volume or 1.0
   if debug then Debugger("alertSound 1. soundPath=" .. tostring(soundPath)..", volume="..tostring(volume)) end
   if type(soundPath) ~= "string" or volume ~= nil and (type(volume) ~= "number" or volume < 0 or volume > 1) then
     Debugger("alert 2. ERROR. Invalid volume or soundPath=" .. tostring(soundPath)..", volume="..tostring(volume))
     return nil
   end
-    Spring.PlaySoundFile(soundPath, 1.0, 'ui')
+    Spring.PlaySoundFile(soundPath, volume, 'ui')
   return true
 end
 

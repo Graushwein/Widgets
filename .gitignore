@@ -6,3 +6,8 @@ debug_showunitids.lua
 Fonts
 Config
 gui_point_tracker_advanced.lua
+cmd_group_guard.lua
+TEST.lua
+.luarc.json
+.gitmodules
+recoil-lua-library

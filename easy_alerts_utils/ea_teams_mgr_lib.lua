@@ -21,6 +21,7 @@ TeamsManager.config.minReAlertSec = 3 -- to prevent a bunch at once
 TeamsManager.config.logEvents = false
 TeamsManager.config.deleteDestroyed = false -- For possible RAM concerns. Though, in the few small tests I tried it didn't seem to save more RAM
 TeamsManager.config.FunctionRunCounts = false
+TeamsManager.config.alertVolume = 1.0
 -- TeamsManager.config.enabledEventRules = true -- No need to use this. It is automatically set by providing Initialize typesRules or nil
 
 TeamsManager.defTypesEventsRules = {}
@@ -440,7 +441,7 @@ function TeamsManager:alert(unitObj, alertVarsTbl) -- nil input alerts from Aler
   end
   if type(alertVarsTbl["alertSound"]) == "string" then -- play audio found in alertSound rule
     if debug or self.debug then Debugger("alert 5. About to play alertSound. unitObj.ID="..tostring(unitObj.ID)..", alertVarsTbl=" .. type(alertVarsTbl)) end
-    AlertSound(alertVarsTbl["alertSound"])
+    AlertSound(alertVarsTbl["alertSound"], TeamsManager.config.alertVolume)
     success = true
     TeamsManager.lastAlertTime = Spring.GetGameSeconds()
   end
@@ -1377,7 +1378,7 @@ function pUnit:setLost(destroyed) -- destroyed = true default
     end
   end
   if destroyed then
-    if TeamsManager.config.enabledEventRules then
+    if TeamsManager.config.enabledEventRules and (self.isCompleted or (self:getHealth() and self.isCompleted)) then
       local destroyedEvent = self:getTypesRulesForEvent("destroyed", true, false)
       if destroyedEvent then
         if debug or self.debug then Debugger("setLost 7. Unit has rule to alert when destroyed, unitName=" .. tostring(UnitDefs[self.defID].translatedHumanName)) end
